@@ -101,18 +101,28 @@ def run_inference(skip_update: bool = False) -> dict:
 
 
 def _update_data() -> None:
-    """Run make update-data to download fresh data and update merged dataset."""
+    """Download / update data via Makefile.
+
+    Uses ``make update`` for incremental updates when raw data already exists,
+    or ``make data`` for a full bootstrap on a fresh environment (e.g. first CI run).
+    """
     import subprocess
 
-    logger.info("Updating data (make update)...")
+    from src.config import DATA_DIR
+
+    raw_smard = DATA_DIR / "raw" / "smard_hourly"
+    has_existing_data = raw_smard.exists() and any(raw_smard.glob("*.csv"))
+    target = "update" if has_existing_data else "data"
+
+    logger.info(f"Running make {target} ({'incremental' if has_existing_data else 'full bootstrap'})...")
     result = subprocess.run(
-        ["make", "update"],
+        ["make", target],
         cwd=str(PROJ_ROOT),
         capture_output=True,
         text=True,
     )
     if result.returncode != 0:
-        logger.error(f"make update failed:\n{result.stderr}")
+        logger.error(f"make {target} failed:\n{result.stderr}")
         raise RuntimeError("Data update failed. Check logs above.")
     logger.success("Data update complete")
 
