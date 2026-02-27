@@ -1,0 +1,40 @@
+{
+  "en": {
+    "title": "DE-LU Energy Price Forecast",
+    "subtitle": "Day-Ahead Electricity Price Prediction",
+    "forecast_chart_title": "24-Hour Price Forecast",
+    "history_chart_title": "Forecast vs Actual",
+    "last_updated": "Last updated",
+    "model_info": "Model Information",
+    "blend_mae": "Blend MAE",
+    "n_models": "Number of Models",
+    "categories": "Model Categories",
+    "unit": "EUR/MWh",
+    "hour": "Hour",
+    "price": "Price",
+    "forecast": "Forecast",
+    "actual": "Actual",
+    "no_data": "No forecast data available yet.",
+    "reselection_warning": "Model degradation detected. Manual reselection recommended.",
+    "forecast_date": "Forecast Date"
+  },
+  "de": {
+    "title": "DE-LU Energiepreisprognose",
+    "subtitle": "Day-Ahead Strompreisprognose",
+    "forecast_chart_title": "24-Stunden-Preisprognose",
+    "history_chart_title": "Prognose vs. Tatsächlich",
+    "last_updated": "Zuletzt aktualisiert",
+    "model_info": "Modellinformationen",
+    "blend_mae": "Blend MAE",
+    "n_models": "Anzahl der Modelle",
+    "categories": "Modellkategorien",
+    "unit": "EUR/MWh",
+    "hour": "Stunde",
+    "price": "Preis",
+    "forecast": "Prognose",
+    "actual": "Tatsächlich",
+    "no_data": "Noch keine Prognosedaten verfügbar.",
+    "reselection_warning": "Modellverschlechterung erkannt. Manuelle Neuauswahl empfohlen.",
+    "forecast_date": "Prognosedatum"
+  }
+}
