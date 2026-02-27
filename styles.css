@@ -123,9 +123,12 @@ main {
 .chart-container {
   width: 100%;
   min-height: 280px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  overflow: hidden;
+}
+
+.chart-container .no-data-msg {
+  text-align: center;
+  padding-top: 120px;
 }
 
 .chart-meta {
