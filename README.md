@@ -1,5 +1,7 @@
 # Day-Ahead Energy Price Forecasting (DE-LU)
 
+**[Live Dashboard](https://smnfrse.github.io/energy-prices/)** — daily 24-hour price forecasts
+
 Predicting hourly day-ahead electricity prices in the Germany/Luxembourg (DE-LU) bidding area using gradient-boosted tree models with engineered features from energy market fundamentals, cross-border flows, and commodity prices.
 
 ## Motivation
