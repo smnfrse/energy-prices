@@ -1,0 +1,176 @@
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: #f8f9fa;
+  color: #212529;
+  line-height: 1.5;
+}
+
+/* ── Header ─────────────────────────────────────────────────────────────── */
+
+header {
+  background: #ffffff;
+  border-bottom: 1px solid #dee2e6;
+  padding: 1.25rem 1.5rem;
+}
+
+.header-inner {
+  max-width: 1000px;
+  margin: 0 auto;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #1a1a2e;
+}
+
+.subtitle {
+  font-size: 0.95rem;
+  color: #6c757d;
+  margin-top: 0.2rem;
+}
+
+.last-updated {
+  font-size: 0.8rem;
+  color: #adb5bd;
+  margin-top: 0.4rem;
+}
+
+/* ── Language toggle ─────────────────────────────────────────────────────── */
+
+.lang-btn {
+  flex-shrink: 0;
+  padding: 0.35rem 0.85rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  background: #ffffff;
+  color: #495057;
+  border: 1.5px solid #ced4da;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+
+.lang-btn:hover {
+  background: #e9ecef;
+  border-color: #adb5bd;
+}
+
+/* ── Main layout ─────────────────────────────────────────────────────────── */
+
+main {
+  max-width: 1000px;
+  margin: 1.5rem auto;
+  padding: 0 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+/* ── Warning banner ──────────────────────────────────────────────────────── */
+
+.warning-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  font-size: 0.9rem;
+  color: #664d03;
+}
+
+.warning-banner[hidden] {
+  display: none;
+}
+
+.warning-icon {
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+/* ── Cards ───────────────────────────────────────────────────────────────── */
+
+.card {
+  background: #ffffff;
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  padding: 1.25rem 1.5rem;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+}
+
+.card h2 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #343a40;
+  margin-bottom: 0.75rem;
+}
+
+/* ── Charts ──────────────────────────────────────────────────────────────── */
+
+.chart-container {
+  width: 100%;
+  min-height: 280px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chart-meta {
+  font-size: 0.8rem;
+  color: #6c757d;
+  margin-bottom: 0.5rem;
+}
+
+.no-data-msg {
+  color: #adb5bd;
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+/* ── Model info ──────────────────────────────────────────────────────────── */
+
+.model-info-grid {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.5rem 1.5rem;
+  font-size: 0.9rem;
+}
+
+.model-info-grid dt {
+  color: #6c757d;
+  font-weight: 500;
+}
+
+.model-info-grid dd {
+  color: #212529;
+  font-weight: 600;
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+
+@media (max-width: 600px) {
+  h1 {
+    font-size: 1.2rem;
+  }
+
+  .card {
+    padding: 1rem;
+  }
+
+  .chart-container {
+    min-height: 220px;
+  }
+}

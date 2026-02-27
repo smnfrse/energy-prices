@@ -1,0 +1,55 @@
+name: Biweekly Retrain
+
+on:
+  schedule:
+    - cron: '0 6 1,15 * *'  # 06:00 UTC on 1st and 15th
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: '3.13.5'
+
+jobs:
+  retrain:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Setup Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -e .
+
+      - name: Cache data directory
+        uses: actions/cache@v4
+        with:
+          path: data/
+          key: retrain-data-${{ github.run_number }}
+          restore-keys: |
+            retrain-data-
+
+      - name: Update training data
+        env:
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+        run: make update-data
+
+      - name: Retrain models
+        env:
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+        run: python -m src.deploy.retrain
+
+      - name: Commit model updates
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add models/production/blend_config.json models/production/*.joblib
+          git diff --staged --quiet || git commit -m "chore: retrain blend models [skip ci]"
+          git push

@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DE-LU Energy Price Forecast</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="header-inner">
+      <div>
+        <h1 data-i18n="title">DE-LU Energy Price Forecast</h1>
+        <p class="subtitle" data-i18n="subtitle">Day-Ahead Electricity Price Prediction</p>
+        <p class="last-updated">
+          <span data-i18n="last_updated">Last updated</span>:
+          <span id="last-updated-value">—</span>
+        </p>
+      </div>
+      <button id="lang-toggle" class="lang-btn" aria-label="Toggle language">DE</button>
+    </div>
+  </header>
+
+  <main>
+
+    <div id="reselection-warning" class="warning-banner" hidden>
+      <span class="warning-icon">&#9888;</span>
+      <span data-i18n="reselection_warning">Model degradation detected. Manual reselection recommended.</span>
+    </div>
+
+    <section class="card">
+      <h2 data-i18n="forecast_chart_title">24-Hour Price Forecast</h2>
+      <p class="chart-meta" id="forecast-date-label"></p>
+      <div id="forecast-chart" class="chart-container">
+        <p class="no-data-msg" data-i18n="no_data">No forecast data available yet.</p>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2 data-i18n="history_chart_title">Forecast vs Actual</h2>
+      <div id="history-chart" class="chart-container">
+        <p class="no-data-msg" data-i18n="no_data">No forecast data available yet.</p>
+      </div>
+    </section>
+
+    <section class="card model-info-card">
+      <h2 data-i18n="model_info">Model Information</h2>
+      <dl class="model-info-grid">
+        <dt data-i18n="blend_mae">Blend MAE</dt>
+        <dd id="meta-blend-mae">—</dd>
+
+        <dt data-i18n="n_models">Number of Models</dt>
+        <dd id="meta-n-models">—</dd>
+
+        <dt data-i18n="categories">Model Categories</dt>
+        <dd id="meta-categories">—</dd>
+      </dl>
+    </section>
+
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>

@@ -1,0 +1,50 @@
+name: Daily Forecast
+
+on:
+  schedule:
+    - cron: '0 8 * * *'  # 08:00 UTC (09:00 CET)
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: '3.13.5'
+
+jobs:
+  forecast:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -e .
+
+      - name: Cache data directory
+        uses: actions/cache@v4
+        with:
+          path: data/
+          key: inference-data-${{ github.run_number }}
+          restore-keys: |
+            inference-data-
+
+      - name: Update data
+        env:
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+        run: make add-data
+
+      - name: Run inference
+        env:
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+        run: python -m src.deploy.inference --skip-update
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./deploy

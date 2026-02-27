@@ -1,0 +1,15 @@
+artifact_path: file:c:/Users/admin/Documents/1WBS/energy_prices/mlruns/1/models/m-ce28e2dec27d4c2cba5e6e3904971a2e/artifacts
+flavors:
+  sklearn:
+    code: null
+    pickled_model: model.pkl
+    serialization_format: cloudpickle
+    sklearn_version: 1.6.1
+    skops_trusted_types: null
+mlflow_version: 3.9.0
+model_id: m-ce28e2dec27d4c2cba5e6e3904971a2e
+model_size_bytes: 4235
+model_uuid: m-ce28e2dec27d4c2cba5e6e3904971a2e
+prompts: null
+run_id: 9be233856ef149d193d72d77536d1534
+utc_time_created: '2026-02-16 11:37:05.341075'
