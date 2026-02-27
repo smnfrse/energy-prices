@@ -340,13 +340,16 @@ def update_all_commodities(data_dir: Path, redundancy_days: int = 14) -> None:
     logger.info("UPDATING COMMODITY PRICE DATA")
     logger.info("=" * 60)
 
+    data_dir.mkdir(parents=True, exist_ok=True)
+
     # Update carbon (ICAP)
     logger.info("\n[1/6] Updating carbon prices (ICAP)...")
     carbon_path = data_dir / "carbon_icap_historical.csv"
     if carbon_path.exists():
         IcapSource().update(carbon_path, redundancy_days)
     else:
-        logger.warning(f"  {carbon_path} not found, skipping")
+        logger.info(f"  {carbon_path} not found, downloading from scratch")
+        IcapSource().download(carbon_path)
 
     # Update carbon real-time (CO2.L)
     logger.info("\n[2/6] Updating carbon prices (CO2.L real-time)...")
@@ -354,7 +357,8 @@ def update_all_commodities(data_dir: Path, redundancy_days: int = 14) -> None:
     if carbon_rt_path.exists():
         YahooSource(TICKERS["carbon_realtime"], "CO2.L").update(carbon_rt_path, redundancy_days)
     else:
-        logger.warning(f"  {carbon_rt_path} not found, skipping")
+        logger.info(f"  {carbon_rt_path} not found, downloading from scratch")
+        YahooSource(TICKERS["carbon_realtime"], "CO2.L").download(carbon_rt_path)
 
     # Update TTF
     logger.info("\n[3/6] Updating TTF gas futures...")
@@ -362,7 +366,8 @@ def update_all_commodities(data_dir: Path, redundancy_days: int = 14) -> None:
     if ttf_path.exists():
         YahooSource(TICKERS["ttf"], "TTF").update(ttf_path, redundancy_days)
     else:
-        logger.warning(f"  {ttf_path} not found, skipping")
+        logger.info(f"  {ttf_path} not found, downloading from scratch")
+        YahooSource(TICKERS["ttf"], "TTF").download(ttf_path)
 
     # Update Brent
     logger.info("\n[4/6] Updating Brent crude oil futures...")
@@ -370,12 +375,19 @@ def update_all_commodities(data_dir: Path, redundancy_days: int = 14) -> None:
     if brent_path.exists():
         YahooSource(TICKERS["brent"], "Brent").update(brent_path, redundancy_days)
     else:
-        logger.warning(f"  {brent_path} not found, skipping")
+        logger.info(f"  {brent_path} not found, downloading from scratch")
+        YahooSource(TICKERS["brent"], "Brent").download(brent_path)
 
     # Update FRED gas data
     logger.info("\n[5/6] Updating FRED gas data...")
+    fred_eu = data_dir / "fred_eu_gas_monthly.csv"
+    fred_us = data_dir / "fred_us_henryhub_daily.csv"
     try:
-        FredSource().update(data_dir, redundancy_days)
+        if not fred_eu.exists() or not fred_us.exists():
+            logger.info("  FRED files not found, downloading from scratch")
+            FredSource().download(data_dir)
+        else:
+            FredSource().update(data_dir, redundancy_days)
     except Exception as e:
         logger.warning(f"  FRED update failed: {e}")
 
