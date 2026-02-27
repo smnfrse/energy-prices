@@ -109,6 +109,8 @@ main {
   border-radius: 8px;
   padding: 1.25rem 1.5rem;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  min-width: 0;
+  overflow: hidden;
 }
 
 .card h2 {
@@ -122,8 +124,16 @@ main {
 
 .chart-container {
   width: 100%;
+  max-width: 100%;
   min-height: 280px;
   overflow: hidden;
+}
+
+.chart-container .js-plotly-plot,
+.chart-container .plot-container,
+.chart-container .svg-container {
+  max-width: 100% !important;
+  width: 100% !important;
 }
 
 .chart-container .no-data-msg {
