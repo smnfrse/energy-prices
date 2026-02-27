@@ -10,6 +10,7 @@ fetch new → trim → concat → save.
 
 from abc import ABC, abstractmethod
 import bisect
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from loguru import logger
@@ -96,12 +97,22 @@ class SmardSource(DataSource):
         self.region = region
         self.resolution = resolution
 
-    def download(self, output_dir: Path, keys: list[int] | None = None, **kwargs) -> None:
-        """Download full history for all keys.
+    def download(
+        self,
+        output_dir: Path,
+        keys: list[int] | None = None,
+        start_date: pd.Timestamp | None = None,
+        max_workers: int = 10,
+        **kwargs,
+    ) -> None:
+        """Download full history (or partial from start_date) for all keys.
 
         Args:
             output_dir: Directory to save CSV files.
             keys: List of filter keys. If None, uses all keys for the region.
+            start_date: If provided, only download data from this date onwards.
+                Used for bootstrapping missing CSVs with recent data.
+            max_workers: Number of parallel download threads.
         """
         if keys is None:
             source_dict = get_filter_dict_for_region(self.region)
@@ -109,20 +120,47 @@ class SmardSource(DataSource):
 
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        for key in keys:
+        def _download_key(key):
             filename = _get_filename_for_key(key, self.region)
             output_path = Path(output_dir / f"{filename}.csv")
 
             if output_path.exists():
                 logger.info(f"{filename} has already been created")
-            else:
-                try:
+                return
+
+            try:
+                if start_date is not None:
+                    all_stamps = get_timestamps(key, self.region, self.resolution)
+                    cutoff_ms = int(start_date.timestamp() * 1000)
+                    filtered = [t for t in all_stamps.timestamps.to_list() if t >= cutoff_ms]
+                    if not filtered:
+                        logger.info(f"No recent data for {filename}, skipping")
+                        return
+                    logger.info(
+                        f"Bootstrapping {filename} from {start_date.date()}"
+                        f" ({len(filtered)} timestamps)"
+                    )
+                    df = get_all_data(
+                        key,
+                        region=self.region,
+                        resolution=self.resolution,
+                        timestamp_list=filtered,
+                    )
+                else:
                     logger.info(f"Attempting to download data for {filename}")
                     df = get_all_data(key, region=self.region, resolution=self.resolution)
-                    df.to_csv(output_path, index=False)
-                    logger.success(f"{filename}.csv successfully saved to {output_dir}")
-                except DataNotAvailableError:
-                    logger.warning(f"{filename} not available for region {self.region}, skipping")
+                if df.empty:
+                    logger.info(f"No data returned for {filename}, skipping")
+                    return
+                df.to_csv(output_path, index=False)
+                logger.success(f"{filename}.csv successfully saved to {output_dir}")
+            except DataNotAvailableError:
+                logger.warning(f"{filename} not available for region {self.region}, skipping")
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {executor.submit(_download_key, key): key for key in keys}
+            for future in as_completed(futures):
+                future.result()  # propagate exceptions
 
     def update(
         self, output_dir: Path, keys: list[int] | None = None, redundancy_days: int = 14
@@ -138,13 +176,29 @@ class SmardSource(DataSource):
             source_dict = get_filter_dict_for_region(self.region)
             keys = list(source_dict.keys())
 
+        # Separate missing keys (need bootstrap) from existing keys (incremental update)
+        bootstrap_keys = []
+        update_keys = []
         for key in keys:
             filename = _get_filename_for_key(key, self.region)
             output_path = Path(output_dir / f"{filename}.csv")
+            if output_path.exists():
+                update_keys.append(key)
+            else:
+                bootstrap_keys.append(key)
 
-            if not output_path.exists():
-                logger.trace(f"{filename} does not exist. Please generate the full data first.")
-                continue
+        # Bootstrap missing keys in one parallel batch
+        if bootstrap_keys:
+            bootstrap_start = pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=45)
+            logger.info(
+                f"Bootstrapping {len(bootstrap_keys)} missing keys (last 45 days, parallel)"
+            )
+            self.download(output_dir, keys=bootstrap_keys, start_date=bootstrap_start)
+
+        # Incremental update for existing keys
+        for key in update_keys:
+            filename = _get_filename_for_key(key, self.region)
+            output_path = Path(output_dir / f"{filename}.csv")
 
             try:
                 update_stamps = self._get_update_timestamps(

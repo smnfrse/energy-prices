@@ -100,19 +100,69 @@ def run_inference(skip_update: bool = False) -> dict:
     return result
 
 
+RELEASE_ASSET_URL = (
+    "https://github.com/smnfrse/energy-prices/releases/download/"
+    "data-latest/merged_dataset_hourly.parquet"
+)
+
+
+def _download_release_asset(dest_path: Path) -> bool:
+    """Download merged dataset from GitHub Release (public repo, no auth)."""
+    import urllib.request
+
+    try:
+        dest_path.parent.mkdir(parents=True, exist_ok=True)
+        logger.info("Downloading baseline data from release...")
+        urllib.request.urlretrieve(RELEASE_ASSET_URL, dest_path)
+        size_mb = dest_path.stat().st_size / 1024 / 1024
+        logger.success(f"Downloaded {size_mb:.1f} MB to {dest_path}")
+        return True
+    except Exception as e:
+        logger.warning(f"Failed to download release asset: {e}")
+        return False
+
+
 def _update_data() -> None:
-    """Run make update-data to download fresh data and update merged dataset."""
+    """Download / update data via Makefile.
+
+    Three paths depending on what data exists locally:
+    1. Raw CSVs exist → ``make update`` (normal incremental, ~2 min)
+    2. No raw CSVs but merged parquet exists → ``make update`` (bootstraps CSVs)
+    3. Nothing exists → download merged parquet from GitHub Release, then ``make update``
+
+    Falls back to ``make data`` (full download, ~50 min) only if the release
+    download fails.
+    """
     import subprocess
 
-    logger.info("Updating data (make update)...")
+    from src.config import DATA_DIR
+
+    raw_smard = DATA_DIR / "raw" / "smard_hourly"
+    has_existing_data = raw_smard.exists() and any(raw_smard.glob("*.csv"))
+    merged_path = get_path("merged", "hour")
+
+    if has_existing_data:
+        target = "update"
+    elif merged_path.exists():
+        target = "update"
+    else:
+        if _download_release_asset(merged_path):
+            target = "update"
+        else:
+            logger.warning("Release download failed, falling back to full data download")
+            target = "data"
+
+    logger.info(
+        f"Running make {target} ({'incremental' if target == 'update' else 'full bootstrap'})..."
+    )
     result = subprocess.run(
-        ["make", "update"],
+        ["make", target],
         cwd=str(PROJ_ROOT),
         capture_output=True,
         text=True,
     )
     if result.returncode != 0:
-        logger.error(f"make update failed:\n{result.stderr}")
+        logger.error(f"make {target} failed:\n{result.stderr}")
         raise RuntimeError("Data update failed. Check logs above.")
     logger.success("Data update complete")
 
