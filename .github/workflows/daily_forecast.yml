@@ -33,15 +33,10 @@ jobs:
           restore-keys: |
             inference-data-
 
-      - name: Update data
+      - name: Run forecast (includes data update)
         env:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
-        run: make add-data
-
-      - name: Run inference
-        env:
-          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
-        run: python -m src.deploy.inference --skip-update
+        run: python -m src.deploy.inference
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
