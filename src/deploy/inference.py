@@ -485,6 +485,15 @@ def _get_recent_actuals(df: pd.DataFrame) -> list[dict]:
 
     actuals = []
     df_berlin["date"] = df_berlin.index.date
+
+    # Debug: log last 5 days to diagnose missing actuals
+    all_dates = sorted(df_berlin["date"].unique())
+    for d in all_dates[-5:]:
+        grp = df_berlin[df_berlin["date"] == d]
+        n_prices = len(grp)
+        n_nan = int(np.sum(np.isnan(grp["target_price"].values.astype(float))))
+        logger.info(f"  Actuals debug: {d} → {n_prices} rows, {n_nan} NaN target_price")
+
     for date, group in df_berlin.groupby("date"):
         prices = group["target_price"].values
         if len(prices) == 24 and not np.any(np.isnan(prices.astype(float))):
@@ -495,6 +504,7 @@ def _get_recent_actuals(df: pd.DataFrame) -> list[dict]:
                 }
             )
 
+    logger.info(f"Actuals: {len(actuals)} complete days, returning last 7")
     return actuals[-7:]
 
 
