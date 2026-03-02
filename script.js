@@ -32,6 +32,7 @@
 
     renderForecastChart(forecast);
     renderHistoryChart(actuals, history);
+    renderErrorChart(actuals, history);
     renderMetadata(metadata);
     setupLanguageToggle();
   }
@@ -76,47 +77,55 @@
 
     container.innerHTML = "";
 
-    const traces = [];
-
-    // Actual prices for recent days
+    // Build single continuous "Actual" trace from all days
+    var actualX = [];
+    var actualY = [];
     actuals.days.forEach(function (day) {
-      const hours = day.prices.map(function (_, i) {
-        return day.date + " " + String(i).padStart(2, "0") + ":00";
-      });
-      traces.push({
-        x: hours,
-        y: day.prices,
-        type: "scatter",
-        mode: "lines",
-        name: t("actual") + " " + day.date,
-        line: { width: 1.5 },
-        hovertemplate: "%{x}<br>%{y:.2f} EUR/MWh<extra></extra>",
+      day.prices.forEach(function (price, i) {
+        actualX.push(day.date + " " + String(i).padStart(2, "0") + ":00");
+        actualY.push(price);
       });
     });
 
-    // Overlay forecast history if available
-    if (history && history.length > 0) {
-      history.forEach(function (entry) {
-        // Only show forecasts for dates that have actuals (for comparison)
-        var matchingActual = actuals.days.find(function (d) { return d.date === entry.date; });
-        if (!matchingActual) return;
+    var traces = [
+      {
+        x: actualX,
+        y: actualY,
+        type: "scatter",
+        mode: "lines",
+        name: t("actual"),
+        line: { width: 2, color: "#495057" },
+        hovertemplate: "%{x}<br>%{y:.2f} EUR/MWh<extra></extra>",
+      },
+    ];
 
-        var hours = entry.prices.map(function (_, i) {
-          return entry.date + " " + String(i).padStart(2, "0") + ":00";
-        });
-        traces.push({
-          x: hours,
-          y: entry.prices,
-          type: "scatter",
-          mode: "lines",
-          name: t("forecast") + " " + entry.date,
-          line: { width: 1.5, dash: "dash" },
-          hovertemplate: "%{x}<br>%{y:.2f} EUR/MWh<extra></extra>",
+    // Build single continuous "Forecast" trace from history entries
+    if (history && history.length > 0) {
+      var forecastX = [];
+      var forecastY = [];
+      // Sort by date to ensure continuity
+      var sorted = history.slice().sort(function (a, b) {
+        return a.date < b.date ? -1 : a.date > b.date ? 1 : 0;
+      });
+      sorted.forEach(function (entry) {
+        entry.prices.forEach(function (price, i) {
+          forecastX.push(entry.date + " " + String(i).padStart(2, "0") + ":00");
+          forecastY.push(price);
         });
       });
-    }
 
-    if (traces.length === 0) return;
+      if (forecastX.length > 0) {
+        traces.push({
+          x: forecastX,
+          y: forecastY,
+          type: "scatter",
+          mode: "lines",
+          name: t("forecast"),
+          line: { width: 2, color: "#4361ee", dash: "dash" },
+          hovertemplate: "%{x}<br>%{y:.2f} EUR/MWh<extra></extra>",
+        });
+      }
+    }
 
     var layout = {
       xaxis: { title: "", tickangle: -45 },
@@ -136,13 +145,6 @@
   function renderMetadata(metadata) {
     if (!metadata) return;
 
-    document.getElementById("meta-blend-mae").textContent =
-      metadata.blend_mae != null ? metadata.blend_mae.toFixed(2) + " EUR/MWh" : "\u2014";
-    document.getElementById("meta-n-models").textContent =
-      metadata.n_models != null ? metadata.n_models : "\u2014";
-    document.getElementById("meta-categories").textContent =
-      metadata.model_categories ? metadata.model_categories.join(", ") : "\u2014";
-
     if (metadata.last_updated) {
       var d = new Date(metadata.last_updated);
       document.getElementById("last-updated-value").textContent = d.toLocaleString();
@@ -152,6 +154,90 @@
     if (metadata.needs_reselection) {
       warning.hidden = false;
     }
+  }
+
+  // --- Daily error metrics ---
+
+  function computeDailyErrors(actuals, history) {
+    if (!actuals || !actuals.days || !history || history.length === 0) return [];
+
+    var actualsByDate = {};
+    actuals.days.forEach(function (day) {
+      actualsByDate[day.date] = day.prices;
+    });
+
+    var errors = [];
+    history.forEach(function (entry) {
+      var actual = actualsByDate[entry.date];
+      if (!actual || actual.length !== 24 || entry.prices.length !== 24) return;
+
+      var sumAE = 0;
+      var sumSE = 0;
+      for (var h = 0; h < 24; h++) {
+        var diff = entry.prices[h] - actual[h];
+        sumAE += Math.abs(diff);
+        sumSE += diff * diff;
+      }
+      errors.push({
+        date: entry.date,
+        mae: sumAE / 24,
+        rmse: Math.sqrt(sumSE / 24),
+      });
+    });
+
+    errors.sort(function (a, b) {
+      return a.date < b.date ? -1 : a.date > b.date ? 1 : 0;
+    });
+
+    return errors;
+  }
+
+  function renderErrorChart(actuals, history) {
+    var container = document.getElementById("error-chart");
+    if (!container) return;
+
+    var errors = computeDailyErrors(actuals, history);
+    if (errors.length === 0) return;
+
+    container.innerHTML = "";
+
+    var dates = errors.map(function (e) { return e.date; });
+    var maeValues = errors.map(function (e) { return e.mae; });
+    var rmseValues = errors.map(function (e) { return e.rmse; });
+
+    var traceMae = {
+      x: dates,
+      y: maeValues,
+      type: "bar",
+      name: t("mae"),
+      marker: { color: "#90b4f0" },
+      hovertemplate: "%{x}<br>MAE: %{y:.2f} EUR/MWh<extra></extra>",
+    };
+
+    var traceRmse = {
+      x: dates,
+      y: rmseValues,
+      type: "bar",
+      name: t("rmse"),
+      marker: { color: "#4361ee" },
+      hovertemplate: "%{x}<br>RMSE: %{y:.2f} EUR/MWh<extra></extra>",
+    };
+
+    var layout = {
+      barmode: "group",
+      xaxis: { title: "", type: "category" },
+      yaxis: { title: t("unit") },
+      margin: { t: 20, r: 30, b: 60, l: 60 },
+      height: 280,
+      legend: { orientation: "h", y: -0.3 },
+      paper_bgcolor: "transparent",
+      plot_bgcolor: "transparent",
+    };
+
+    Plotly.newPlot(container, [traceMae, traceRmse], layout, {
+      responsive: true,
+      displayModeBar: false,
+    });
   }
 
   // --- Language toggle ---

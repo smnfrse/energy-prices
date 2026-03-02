@@ -1,5 +1,5 @@
 {
-  "last_updated": "2026-03-02T09:00:23.896539+00:00",
+  "last_updated": "2026-03-02T09:50:58.928498+00:00",
   "forecast_date": "2026-03-03",
   "blend_mae": 9.8587,
   "blend_rmse": 18.5169,
@@ -7,9 +7,9 @@
   "n_models": 8,
   "needs_reselection": false,
   "model_categories": [
-    "catboost",
     "lgbm",
-    "xgboost",
-    "linear"
+    "linear",
+    "catboost",
+    "xgboost"
   ]
 }
