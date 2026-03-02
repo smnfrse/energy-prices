@@ -86,6 +86,7 @@ cover/
 
 # Logs
 *.log
+ci_log*.txt
 
 # MkDocs / mkdocs documentation
 docs/site/
