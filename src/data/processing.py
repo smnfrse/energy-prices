@@ -319,6 +319,51 @@ def _load_energy_charts_fallback() -> "pd.Series | None":
     return ec_df["value"]
 
 
+def _extend_with_energy_charts(df: pd.DataFrame, ec_fallback: "pd.Series | None") -> pd.DataFrame:
+    """Extend dataset with Energy Charts rows beyond the last SMARD timestamp.
+
+    When SMARD hasn't published data for recent hours but Energy Charts already
+    has (e.g. today's day-ahead prices set at the D-1 noon auction), this appends
+    new rows with target_price from EC and NaN for all other columns.
+
+    EC data post-Oct 2025 is quarter-hourly (15-min). Values within each hour
+    are averaged to produce the true hourly price.
+
+    Args:
+        df: DataFrame with datetime index.
+        ec_fallback: Energy Charts price series, or None.
+
+    Returns:
+        DataFrame, possibly extended with EC-only rows.
+    """
+    if ec_fallback is None:
+        return df
+
+    last_ts = df.index.max()
+    ec_beyond = ec_fallback[ec_fallback.index > last_ts]
+
+    if ec_beyond.empty:
+        logger.info("Energy Charts has no data beyond last SMARD timestamp — no extension needed")
+        return df
+
+    # Resample to hourly by averaging quarter-hourly values within each hour
+    ec_hourly = ec_beyond.resample("h").mean().dropna()
+
+    if ec_hourly.empty:
+        return df
+
+    # Create new rows: target_price from EC, all other columns NaN
+    extension = pd.DataFrame(index=ec_hourly.index, columns=df.columns)
+    extension["target_price"] = ec_hourly
+
+    logger.info(
+        f"Extended dataset with {len(ec_hourly)} Energy Charts rows "
+        f"({ec_hourly.index.min()} to {ec_hourly.index.max()})"
+    )
+
+    return pd.concat([df, extension])
+
+
 def create_unified_target(
     df: pd.DataFrame, ec_fallback: "pd.Series | None" = None
 ) -> pd.DataFrame:
@@ -472,6 +517,9 @@ def run_merge_pipeline(
     ec_fallback = _load_energy_charts_fallback()
     df = create_unified_target(df, ec_fallback=ec_fallback)
 
+    # Step 3b: Extend with EC rows beyond last SMARD timestamp (e.g. today's prices)
+    df = _extend_with_energy_charts(df, ec_fallback)
+
     # Step 4: Add regime dummies
     df = add_regime_dummies(df)
 
@@ -585,10 +633,10 @@ def run_merge_pipeline_incremental(
 
     # Create target_price for new rows (post-split, so use DE-LU price)
     post_col = "marktpreis_deutschland_luxemburg"
+    ec_fallback = _load_energy_charts_fallback()
     if post_col in new_rows.columns:
         new_rows["target_price"] = new_rows[post_col]
         # Fill any SMARD gaps with Energy Charts fallback
-        ec_fallback = _load_energy_charts_fallback()
         if ec_fallback is not None:
             n_gaps = new_rows["target_price"].isna().sum()
             if n_gaps > 0:
@@ -601,6 +649,9 @@ def run_merge_pipeline_incremental(
                 logger.info("No target_price gaps — Energy Charts fallback not needed")
     else:
         logger.warning(f"Column {post_col} not found in new data")
+
+    # Extend with EC rows beyond last SMARD timestamp (e.g. today's prices)
+    new_rows = _extend_with_energy_charts(new_rows, ec_fallback)
 
     # Add regime dummies
     new_rows = add_regime_dummies(new_rows)
