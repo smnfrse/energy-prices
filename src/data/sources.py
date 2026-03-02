@@ -452,7 +452,7 @@ class EnergyChartsSource(DataSource):
 
         bzn = self.config["params"]["bzn"]
         start = pd.Timestamp(start_date, tz="UTC")
-        end = pd.Timestamp.now(tz="UTC")
+        end = pd.Timestamp.now(tz="UTC").normalize() + pd.Timedelta(days=2)
 
         logger.info(
             f"Downloading Energy Charts {self.series_name} from {start.date()} to {end.date()}"
@@ -466,5 +466,8 @@ class EnergyChartsSource(DataSource):
         from src.data.energy_charts import fetch_price
 
         bzn = self.config["params"]["bzn"]
-        end = pd.Timestamp.now(tz="UTC")
+        # Day-ahead prices are set at the D-1 auction (~noon CET), so tomorrow's
+        # prices are already known. Fetch through end of tomorrow to ensure we
+        # get all available day-ahead data, not just up to "now".
+        end = pd.Timestamp.now(tz="UTC").normalize() + pd.Timedelta(days=2)
         return fetch_price(bzn, start_date, end)
