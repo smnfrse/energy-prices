@@ -50,7 +50,7 @@
       x: hours,
       y: forecast.prices,
       type: "bar",
-      marker: { color: "#4361ee" },
+      marker: { color: "#3B82F6" },
       hovertemplate: "%{x}<br>%{y:.2f} EUR/MWh<extra></extra>",
     };
 
@@ -94,7 +94,7 @@
         type: "scatter",
         mode: "lines",
         name: t("actual"),
-        line: { width: 2, color: "#495057" },
+        line: { width: 2, color: "#64748B" },
         hovertemplate: "%{x}<br>%{y:.2f} EUR/MWh<extra></extra>",
       },
     ];
@@ -121,7 +121,7 @@
           type: "scatter",
           mode: "lines",
           name: t("forecast"),
-          line: { width: 2, color: "#4361ee", dash: "dash" },
+          line: { width: 2, color: "#3B82F6", dash: "dash" },
           hovertemplate: "%{x}<br>%{y:.2f} EUR/MWh<extra></extra>",
         });
       }
@@ -210,7 +210,7 @@
       y: maeValues,
       type: "bar",
       name: t("mae"),
-      marker: { color: "#90b4f0" },
+      marker: { color: "#93C5FD" },
       hovertemplate: "%{x}<br>MAE: %{y:.2f} EUR/MWh<extra></extra>",
     };
 
@@ -219,7 +219,7 @@
       y: rmseValues,
       type: "bar",
       name: t("rmse"),
-      marker: { color: "#4361ee" },
+      marker: { color: "#EF4444" },
       hovertemplate: "%{x}<br>RMSE: %{y:.2f} EUR/MWh<extra></extra>",
     };
 
