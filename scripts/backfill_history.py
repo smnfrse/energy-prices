@@ -112,7 +112,9 @@ def backfill(days: int = 8) -> None:
         )
         logger.success(f"  Generated forecast for {forecast_date_str}")
 
-    # Sort and trim
+    # Remove entries beyond tomorrow (stale from previous runs) and trim
+    tomorrow_str = str(tomorrow_cet)
+    history = [h for h in history if h["date"] <= tomorrow_str]
     history = sorted(history, key=lambda h: h["date"])[-HISTORY_MAX_DAYS:]
 
     # Write
