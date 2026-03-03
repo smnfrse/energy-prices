@@ -61,9 +61,13 @@ def backfill(days: int = 8) -> None:
 
     # Generate forecasts for each target date.
     # Forecast date D predicts prices for day D using data through D-1 (CET).
-    # The latest possible forecast is last_cet+1 (uses all available data).
+    # Cap at tomorrow (same as production inference) — we can't forecast further out.
+    import zoneinfo
+
     generated_at = datetime.now(timezone.utc).isoformat()
-    latest_forecast = last_cet + timedelta(days=1)
+    tz = zoneinfo.ZoneInfo("Europe/Berlin")
+    tomorrow_cet = datetime.now(tz).date() + timedelta(days=1)
+    latest_forecast = min(last_cet + timedelta(days=1), tomorrow_cet)
     target_dates = [latest_forecast - timedelta(days=i) for i in range(days - 1, -1, -1)]
     logger.info(f"Backfill target dates: {[str(d) for d in target_dates]}")
 
