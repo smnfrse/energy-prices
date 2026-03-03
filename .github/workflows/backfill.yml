@@ -1,0 +1,69 @@
+name: Backfill Forecast History
+
+on:
+  workflow_dispatch:
+    inputs:
+      days:
+        description: 'Number of days to backfill'
+        required: false
+        default: '8'
+
+env:
+  PYTHON_VERSION: '3.13.5'
+
+permissions:
+  contents: write
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Setup Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -e .
+
+      - name: Cache data directory
+        uses: actions/cache@v4
+        with:
+          path: data/
+          key: inference-data-${{ github.run_number }}
+          restore-keys: |
+            inference-data-
+
+      - name: Restore forecast history from gh-pages
+        run: |
+          mkdir -p deploy/data
+          gh api repos/${{ github.repository }}/contents/data/forecast_history.json?ref=gh-pages \
+            --jq '.content' | base64 -d > deploy/data/forecast_history.json 2>/dev/null || true
+          if [ -s deploy/data/forecast_history.json ]; then
+            echo "Restored $(python -c 'import json;print(len(json.load(open("deploy/data/forecast_history.json"))))') history entries from gh-pages"
+          else
+            echo "No existing history on gh-pages, starting fresh"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run normal inference (updates data + generates tomorrow's forecast)
+        env:
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+        run: python -m src.deploy.inference
+
+      - name: Run backfill
+        run: python scripts/backfill_history.py --days ${{ github.event.inputs.days }}
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./deploy
