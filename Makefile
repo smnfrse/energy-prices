@@ -46,13 +46,12 @@ format:
 # 	python -m pytest tests
 
 
-## Set up Python interpreter environment
+## Create conda environment and install all dependencies
 .PHONY: create_environment
 create_environment:
-
 	conda create --name $(PROJECT_NAME) python=$(PYTHON_VERSION) -y
-
-	@echo ">>> conda env created. Activate with:\nconda activate $(PROJECT_NAME)"
+	conda run -n $(PROJECT_NAME) pip install -e .
+	@echo ">>> Environment ready. Activate with: conda activate $(PROJECT_NAME)"
 
 
 
@@ -208,4 +207,4 @@ endef
 export PRINT_HELP_PYSCRIPT
 
 help:
-	@$(PYTHON_INTERPRETER) -c "${PRINT_HELP_PYSCRIPT}" < $(MAKEFILE_LIST)
+	@python -c "${PRINT_HELP_PYSCRIPT}" < $(MAKEFILE_LIST)

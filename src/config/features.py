@@ -370,8 +370,8 @@ def build_aggregation_rules_v3():
     # EWMA features (all spans, all columns)
     rules["*_ewma_*"] = "first"
 
-    # Morning actuals features
-    rules["*_d1_h0-10_mean"] = "first"
+    # Morning actuals features (covers _h0-10, _h0-9, _h0-6 variants)
+    rules["*_d1_h0-*_mean"] = "first"
 
     # New derived features (created at daily level, already lagged)
     rules["pct_renewable"] = "first"
@@ -443,11 +443,8 @@ AVAILABILITY_RULES = [
     AvailabilityRule("ttf_eur_per_mwh_ewma_*", 0, None, "derived"),
     AvailabilityRule("brent_usd_per_barrel_ewma_*", 0, None, "derived"),
     # Morning actuals features - correctly windowed by RollingStatsTransformer
-    AvailabilityRule("stromverbrauch_gesamt_(netzlast)_d1_h0-10_mean", 0, None, "derived"),
-    AvailabilityRule("stromverbrauch_residuallast_d1_h0-10_mean", 0, None, "derived"),
-    AvailabilityRule("stromerzeugung_wind_onshore_d1_h0-10_mean", 0, None, "derived"),
-    AvailabilityRule("stromerzeugung_wind_offshore_d1_h0-10_mean", 0, None, "derived"),
-    AvailabilityRule("stromerzeugung_photovoltaik_d1_h0-10_mean", 0, None, "derived"),
+    # Wildcard covers all cutoff variants: _h0-10, _h0-9, _h0-6
+    AvailabilityRule("*_d1_h0-*_mean", 0, None, "derived"),
     # V4 hourly pipeline features
     AvailabilityRule("target_price_lag_d1", 0, None, "derived"),
     AvailabilityRule("target_price_lag_d7", 0, None, "derived"),
@@ -464,6 +461,7 @@ AVAILABILITY_RULES = [
     AvailabilityRule("stromerzeugung_wind_offshore_lag_d2", 0, None, "derived"),
     AvailabilityRule("stromerzeugung_photovoltaik_lag_d2", 0, None, "derived"),
     AvailabilityRule("*_ewma_*_h10", 0, None, "derived"),  # h10-cutoff EWMA variants
+    AvailabilityRule("*_ewma_*_h7", 0, None, "derived"),  # h7-cutoff EWMA variants
     AvailabilityRule("total_exports", 0, None, "derived"),  # D-2 mean via Phase 6 overwrite
     AvailabilityRule("total_imports", 0, None, "derived"),  # D-2 mean via Phase 6 overwrite
     AvailabilityRule("day_index", 0, None, "derived"),
