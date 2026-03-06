@@ -119,7 +119,7 @@ class RollingStatsTransformer(BaseEstimator, TransformerMixin):
 
         resolved = _resolve_columns(self.columns, X)
         # Use local time for date grouping and hour filtering when timezone is set
-        if self.timezone:
+        if getattr(self, "timezone", None):
             tz_index = X.index.tz_convert(self.timezone)
             dates = tz_index.normalize()
             hours_arr = tz_index.hour.values
@@ -271,7 +271,7 @@ class EWMATransformer(BaseEstimator, TransformerMixin):
 
         resolved = _resolve_columns(self.columns, X)
         # Use local time for date grouping and hour filtering when timezone is set
-        if self.timezone:
+        if getattr(self, "timezone", None):
             tz_index = X.index.tz_convert(self.timezone)
             dates = tz_index.normalize()
             hours_arr = tz_index.hour.values
