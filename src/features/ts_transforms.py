@@ -95,12 +95,15 @@ class RollingStatsTransformer(BaseEstimator, TransformerMixin):
         windows: List of WindowSpec defining the windows to compute.
         overwrite: If True (with exactly 1 window), replace original column
             values with the lagged aggregate instead of creating new columns.
+        timezone: If set (e.g., "Europe/Berlin"), date grouping and hour
+            filtering use local time. Default None uses UTC.
     """
 
-    def __init__(self, columns, windows, overwrite=False):
+    def __init__(self, columns, windows, overwrite=False, timezone=None):
         self.columns = columns
         self.windows = windows
         self.overwrite = overwrite
+        self.timezone = timezone
 
     def fit(self, X, y=None):
         return self
@@ -115,10 +118,16 @@ class RollingStatsTransformer(BaseEstimator, TransformerMixin):
             raise ValueError("Index must be DatetimeIndex")
 
         resolved = _resolve_columns(self.columns, X)
-        dates = X.index.normalize()
+        # Use local time for date grouping and hour filtering when timezone is set
+        if self.timezone:
+            tz_index = X.index.tz_convert(self.timezone)
+            dates = tz_index.normalize()
+            hours_arr = tz_index.hour.values
+        else:
+            dates = X.index.normalize()
+            hours_arr = X.index.hour.values
         # Pre-compute date→row indices mapping once (shared across columns/windows)
         date_indices = pd.Series(np.arange(len(dates)), index=dates).groupby(level=0).indices
-        hours_arr = X.index.hour.values
         created = []
 
         for col in resolved:
@@ -224,6 +233,8 @@ class EWMATransformer(BaseEstimator, TransformerMixin):
         cutoff_hour: Hour cutoff on the cutoff_day (e.g., 11 for 11am).
             If None, uses last hour of cutoff_day.
         adjust: Whether to use adjusted EWMA (default: False).
+        timezone: If set (e.g., "Europe/Berlin"), date grouping and hour
+            filtering use local time. Default None uses UTC.
     """
 
     def __init__(
@@ -234,6 +245,7 @@ class EWMATransformer(BaseEstimator, TransformerMixin):
         cutoff_hour=None,
         adjust=False,
         col_suffix="",
+        timezone=None,
     ):
         self.columns = columns
         self.spans = spans
@@ -241,9 +253,11 @@ class EWMATransformer(BaseEstimator, TransformerMixin):
         self.cutoff_hour = cutoff_hour
         self.adjust = adjust
         self.col_suffix = col_suffix
+        self.timezone = timezone
 
     def __setstate__(self, state):
         state.setdefault("col_suffix", "")
+        state.setdefault("timezone", None)
         self.__dict__.update(state)
 
     def fit(self, X, y=None):
@@ -256,9 +270,15 @@ class EWMATransformer(BaseEstimator, TransformerMixin):
             raise ValueError("Index must be DatetimeIndex")
 
         resolved = _resolve_columns(self.columns, X)
-        dates = X.index.normalize()
+        # Use local time for date grouping and hour filtering when timezone is set
+        if self.timezone:
+            tz_index = X.index.tz_convert(self.timezone)
+            dates = tz_index.normalize()
+            hours_arr = tz_index.hour.values
+        else:
+            dates = X.index.normalize()
+            hours_arr = X.index.hour.values
         date_indices = pd.Series(np.arange(len(dates)), index=dates).groupby(level=0).indices
-        hours_arr = X.index.hour.values
         created = []
 
         for col in resolved:
@@ -490,7 +510,7 @@ class DailyPivotTransformer(BaseEstimator, TransformerMixin):
             for hour in range(24):
                 col_name = f"{prefix}_{hour}"
                 daily_series = hourly_vals.apply(
-                    lambda arr, h=hour: (arr[h] if arr is not None and len(arr) > h else np.nan)
+                    lambda arr, h=hour: arr[h] if arr is not None and len(arr) > h else np.nan
                 )
 
                 # Apply day offset if specified

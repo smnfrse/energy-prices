@@ -196,9 +196,9 @@ def load_dataset(
         )
         local_path = Path(local_dir)
 
-        # Load dataframes
-        X = pd.read_parquet(local_path / "X.parquet")
-        y = pd.read_parquet(local_path / "y.parquet")
+        # Load dataframes (with pyarrow tz workaround for pandas 3.0)
+        X = _read_parquet_tz_safe(local_path / "X.parquet")
+        y = _read_parquet_tz_safe(local_path / "y.parquet")
 
         # Load metadata
         metadata = json.loads((local_path / "metadata.json").read_text())
@@ -400,6 +400,45 @@ def list_datasets(tags: dict | None = None) -> pd.DataFrame:
 # =============================================================================
 
 
+def _read_parquet_tz_safe(path: Path) -> pd.DataFrame:
+    """Read a parquet file, working around pandas 3.0 + pyarrow tz bug.
+
+    Strips timezone metadata from the arrow table, converts to pandas,
+    then re-attaches UTC timezone to the index if it was tz-aware.
+    """
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    table = pq.read_table(path)
+    schema_meta = table.schema.pandas_metadata or {}
+    idx_columns = schema_meta.get("index_columns", [])
+
+    # Check if any field has timezone
+    tz_fields = {f.name for f in table.schema if "tz=" in str(f.type)}
+    if not tz_fields:
+        return pd.read_parquet(path)
+
+    # Strip all metadata and cast tz-aware columns to naive
+    table = table.replace_schema_metadata(None)
+    naive_ts = pa.timestamp("ns")
+    arrays = {}
+    for i, field in enumerate(table.schema):
+        col = table.column(i)
+        if field.name in tz_fields:
+            col = col.cast(pa.timestamp("ns", tz="UTC")).cast(naive_ts)
+        arrays[field.name] = col
+
+    df = pa.table(arrays).to_pandas()
+
+    # Restore index
+    for idx_col in idx_columns:
+        if isinstance(idx_col, str) and idx_col in df.columns:
+            df.index = pd.DatetimeIndex(df[idx_col], name="time").tz_localize("UTC")
+            df = df.drop(columns=[idx_col])
+
+    return df
+
+
 def _load_merged_data(resolution: str = "hour") -> pd.DataFrame:
     """Load the merged dataset from processed directory.
 
@@ -407,11 +446,11 @@ def _load_merged_data(resolution: str = "hour") -> pd.DataFrame:
         resolution: Data resolution - "hour" or "quarterhour".
 
     Returns:
-        DataFrame with datetime index.
+        DataFrame with UTC datetime index.
     """
     path = get_path("merged", resolution)
     logger.info(f"Loading merged dataset from {path}")
-    df = pd.read_parquet(path)
+    df = _read_parquet_tz_safe(path)
     logger.info(f"Loaded {len(df)} rows, {len(df.columns)} columns")
     return df
 

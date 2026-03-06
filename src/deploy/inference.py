@@ -261,7 +261,7 @@ def _impute_inference_gaps(X_features: pd.DataFrame) -> pd.DataFrame:
         "pct_prog_",
         "pct_erdgas",
         "pct_",
-        "_d1_h0-10_mean",
+        "_d1_h0-6_mean",
         "supply_demand_gap",
         "marktpreis_",
         "carbon_",

@@ -990,23 +990,28 @@ _DAY_INDEX_EPOCH = pd.Timestamp("2015-01-04 23:00:00", tz="UTC")  # 2015-01-05 0
 _YEAR_INDEX_BASE = 2015
 
 
-def preprocessor_v5_slim_hourly() -> "Pipeline":
-    """Curated 85-feature hourly pipeline with leakage fixes and new time features.
+def preprocessor_v5_slim_hourly(morning_cutoff_cet: int | None = 10) -> "Pipeline":
+    """Curated hourly pipeline with configurable morning data cutoff.
 
-    Key changes from v4:
-    - Leakage fixes: drops stromverbrauch_residuallast and
-      stromverbrauch_pumpspeicher
-    - Aggressive feature pruning: 126 -> 85 features
-    - New: same-hour lags for target (D-2, D-14), marktpreis
-      (frankreich/schweiz D-1), generation actuals (wind_onshore/offshore,
-      photovoltaik D-2)
-    - New: target EWMA variants with D-1 10am cutoff (_h10 suffix)
-    - New: total_imports / total_exports (sum of cross-border flows, D-2 mean)
-    - New: day_index + year_index (time trend features)
-    - New: 5 interaction terms (top features x day_index)
+    The morning_cutoff_cet parameter controls how much same-day actual data
+    is available at forecast time:
+
+    - morning_cutoff_cet=10: Morning actuals D-1 h0-9 CET, EWMA actuals at
+      D-1 10am CET, target EWMA with _h10 suffix. (~84 features)
+    - morning_cutoff_cet=7: Morning actuals D-1 h0-6 CET, EWMA actuals at
+      D-1 7am CET, target EWMA with _h7 suffix. (~84 features)
+    - morning_cutoff_cet=None: No morning actuals, EWMA actuals at end of
+      D-2, no morning-cutoff target EWMA. (~78 features)
+
+    Nuclear generation (pct_kernenergie) is always excluded (decommissioned
+    April 2023, permanently zero).
+
+    Args:
+        morning_cutoff_cet: Hour in CET/CEST for morning data cutoff.
+            10 = 10am CET, 7 = 7am CET, None = no morning actuals.
 
     Returns:
-        Unfitted sklearn Pipeline producing 85 features + target column 'y'.
+        Unfitted sklearn Pipeline producing features + target column 'y'.
     """
     from sklearn.pipeline import Pipeline
     from sklearn.preprocessing import FunctionTransformer
@@ -1026,6 +1031,8 @@ def preprocessor_v5_slim_hourly() -> "Pipeline":
         SameHourLagTransformer,
     )
     from src.features.validation import validate_pipeline_leakage
+
+    tz = "Europe/Berlin"
 
     def add_price_ranges(X):
         X = X.copy()
@@ -1085,50 +1092,59 @@ def preprocessor_v5_slim_hourly() -> "Pipeline":
             )
         )
 
-    pipe = Pipeline(
-        [
-            # Phase 1: Rolling stats on target_price
-            (
-                "rolling_target",
-                RollingStatsTransformer(
-                    columns=["target_price"],
-                    windows=[
-                        WindowSpec(start_day=-7, end_day=-7, agg="mean"),
-                        WindowSpec(start_day=-7, end_day=-1, agg="mean"),
-                        WindowSpec(start_day=-7, end_day=-1, agg="std"),
-                        WindowSpec(start_day=-7, end_day=-1, agg="max"),
-                        WindowSpec(start_day=-7, end_day=-1, agg="min"),
-                        WindowSpec(start_day=-7, end_day=-1, hours=list(range(8, 20)), agg="mean"),
-                        WindowSpec(start_day=-30, end_day=-1, agg="mean"),
-                        WindowSpec(start_day=-30, end_day=-1, agg="std"),
-                        WindowSpec(start_day=-30, end_day=-1, agg="min"),
-                        WindowSpec(start_day=-30, end_day=-1, agg="max"),
-                        WindowSpec(start_day=-2, end_day=-1, agg="std"),  # 48h volatility
-                        WindowSpec(start_day=-3, end_day=-1, agg="std"),  # 72h volatility
-                    ],
-                ),
+    # --- Build pipeline steps dynamically based on morning_cutoff_cet ---
+    steps = [
+        # Phase 1: Rolling stats on target_price (unchanged across variants)
+        (
+            "rolling_target",
+            RollingStatsTransformer(
+                columns=["target_price"],
+                windows=[
+                    WindowSpec(start_day=-7, end_day=-7, agg="mean"),
+                    WindowSpec(start_day=-7, end_day=-1, agg="mean"),
+                    WindowSpec(start_day=-7, end_day=-1, agg="std"),
+                    WindowSpec(start_day=-7, end_day=-1, agg="max"),
+                    WindowSpec(start_day=-7, end_day=-1, agg="min"),
+                    WindowSpec(start_day=-7, end_day=-1, hours=list(range(8, 20)), agg="mean"),
+                    WindowSpec(start_day=-30, end_day=-1, agg="mean"),
+                    WindowSpec(start_day=-30, end_day=-1, agg="std"),
+                    WindowSpec(start_day=-30, end_day=-1, agg="min"),
+                    WindowSpec(start_day=-30, end_day=-1, agg="max"),
+                    WindowSpec(start_day=-2, end_day=-1, agg="std"),  # 48h volatility
+                    WindowSpec(start_day=-3, end_day=-1, agg="std"),  # 72h volatility
+                ],
             ),
-            # Phase 2: EWMA prices — end-of-D-1 cutoff (target + frankreich only)
+        ),
+        # Phase 2: EWMA prices — end-of-D-1 cutoff (unchanged)
+        (
+            "ewma_prices",
+            EWMATransformer(
+                columns=["target_price", "marktpreis_frankreich"],
+                spans=[6, 24, 2160],
+                cutoff_day=-1,
+            ),
+        ),
+    ]
+
+    # Phase 2b: EWMA target price with morning cutoff (skip for midnight)
+    if morning_cutoff_cet is not None:
+        steps.append(
             (
-                "ewma_prices",
+                "ewma_prices_morning",
                 EWMATransformer(
-                    columns=["target_price", "marktpreis_frankreich"],
+                    columns=["target_price"],
                     spans=[6, 24, 2160],
                     cutoff_day=-1,
+                    cutoff_hour=morning_cutoff_cet,
+                    col_suffix=f"_h{morning_cutoff_cet}",
+                    timezone=tz,
                 ),
-            ),
-            # Phase 2b: EWMA target price — D-1 10am cutoff, _h10 suffix
-            (
-                "ewma_prices_h10",
-                EWMATransformer(
-                    columns=["target_price"],
-                    spans=[6, 24, 2160],
-                    cutoff_day=-1,
-                    cutoff_hour=10,
-                    col_suffix="_h10",
-                ),
-            ),
-            # Phase 3: EWMA actuals — D-1 10am cutoff
+            )
+        )
+
+    # Phase 3: EWMA actuals — cutoff depends on variant
+    if morning_cutoff_cet is not None:
+        steps.append(
             (
                 "ewma_actuals",
                 EWMATransformer(
@@ -1139,23 +1155,47 @@ def preprocessor_v5_slim_hourly() -> "Pipeline":
                     ],
                     spans=[24, 168, 2160],
                     cutoff_day=-1,
-                    cutoff_hour=10,
+                    cutoff_hour=morning_cutoff_cet,
+                    timezone=tz,
                 ),
-            ),
-            # Phase 4: EWMA commodities — full D-2 cutoff
+            )
+        )
+    else:
+        # Midnight: no morning data, fall back to end of D-2
+        steps.append(
             (
-                "ewma_commodities",
+                "ewma_actuals",
                 EWMATransformer(
                     columns=[
-                        "carbon_eur_per_ton",
-                        "ttf_eur_per_mwh",
-                        "brent_usd_per_barrel",
+                        "stromverbrauch_residuallast",
+                        "stromerzeugung_wind_onshore",
+                        "stromerzeugung_photovoltaik",
                     ],
-                    spans=[24, 720, 2160],
+                    spans=[24, 168, 2160],
                     cutoff_day=-2,
                 ),
+            )
+        )
+
+    steps.append(
+        # Phase 4: EWMA commodities — full D-2 cutoff (unchanged)
+        (
+            "ewma_commodities",
+            EWMATransformer(
+                columns=[
+                    "carbon_eur_per_ton",
+                    "ttf_eur_per_mwh",
+                    "brent_usd_per_barrel",
+                ],
+                spans=[24, 720, 2160],
+                cutoff_day=-2,
             ),
-            # Phase 5: Morning-of-D-1 actuals (hours 0-10, 3 columns vs v4's 5)
+        )
+    )
+
+    # Phase 5: Morning-of-D-1 actuals (skip for midnight)
+    if morning_cutoff_cet is not None:
+        steps.append(
             (
                 "morning_actuals",
                 RollingStatsTransformer(
@@ -1165,11 +1205,21 @@ def preprocessor_v5_slim_hourly() -> "Pipeline":
                         "stromerzeugung_wind_offshore",
                     ],
                     windows=[
-                        WindowSpec(start_day=-1, end_day=-1, hours=list(range(0, 11)), agg="mean"),
+                        WindowSpec(
+                            start_day=-1,
+                            end_day=-1,
+                            hours=list(range(0, morning_cutoff_cet)),
+                            agg="mean",
+                        ),
                     ],
                     overwrite=False,
+                    timezone=tz,
                 ),
-            ),
+            )
+        )
+
+    steps.extend(
+        [
             # Phase 5b: Total cross-border flows — BEFORE Phase 6 overwrite
             (
                 "total_flows",
@@ -1232,88 +1282,88 @@ def preprocessor_v5_slim_hourly() -> "Pipeline":
             ("price_ranges", FunctionTransformer(add_price_ranges, validate=False)),
             # Phase 10: Rename target_price -> y
             ("rename_target", FunctionTransformer(rename_target, validate=False)),
-            # Phase 11: Drop unused columns (leakage fixes + low-importance pruning)
-            (
-                "drop_cols",
-                ColumnDropper(
-                    exclude=[
-                        # Structural
-                        "cross-border_*",
-                        "net_export_*",
-                        "month",
-                        "month_sin",
-                        "month_cos",
-                        "regime_*",
-                        # Leakage fixes
-                        "stromverbrauch_residuallast",
-                        "stromverbrauch_pumpspeicher",
-                        # Low-importance temporal
-                        "is_weekend",
-                        "day_of_month",
-                        "week_of_year",
-                        # Degenerate / low-importance daily aggregates
-                        "prognostizierte_erzeugung_wind_und_photovoltaik_daily_mean",
-                        "prognostizierter_verbrauch_gesamt_daily_mean",
-                        "prognostizierte_erzeugung_wind_und_photovoltaik_daily_sum",
-                        "prognostizierter_verbrauch_gesamt_daily_sum",
-                        "prognostizierter_verbrauch_gesamt_daily_max",
-                        # Generation mix pct (low importance)
-                        "pct_renewable",
-                        "pct_biomasse",
-                        "pct_braunkohle",
-                        "pct_photovoltaik",
-                        "pct_sonstige_erneuerbare",
-                        "pct_steinkohle",
-                        "pct_wind_onshore",
-                        "total_generation",
-                        # Neighbour prices (keep frankreich/schweiz/niederlande/osterreich)
-                        "marktpreis_belgien",
-                        "marktpreis_dänemark_1",
-                        "marktpreis_dänemark_2",
-                        "marktpreis_italien_(nord)",
-                        "marktpreis_norwegen_2",
-                        "marktpreis_polen",
-                        "marktpreis_schweden_4",
-                        "marktpreis_slowenien",
-                        "marktpreis_tschechien",
-                        "marktpreis_ungarn",
-                        # Neighbour EWMAs (keep frankreich only)
-                        "marktpreis_belgien_ewma_*",
-                        "marktpreis_niederlande_ewma_*",
-                        "marktpreis_österreich_ewma_*",
-                        # Generation actuals (keep wind_onshore/offshore, pv, erdgas)
-                        "stromerzeugung_biomasse",
-                        "stromerzeugung_braunkohle",
-                        "stromerzeugung_kernenergie",
-                        "stromerzeugung_pumpspeicher",
-                        "stromerzeugung_sonstige_erneuerbare",
-                        "stromerzeugung_sonstige_konventionelle",
-                        "stromerzeugung_steinkohle",
-                        "stromerzeugung_wasserkraft",
-                        # Generation EWMA spans (keep one per source)
-                        "stromerzeugung_wind_onshore_ewma_24h",
-                        "stromerzeugung_wind_onshore_ewma_2160h",
-                        "stromerzeugung_photovoltaik_ewma_24h",
-                        "stromerzeugung_photovoltaik_ewma_168h",
-                        "stromverbrauch_residuallast_ewma_168h",
-                        "stromverbrauch_residuallast_ewma_2160h",
-                        # Commodity EWMAs (keep carbon_24h, ttf_24h, ttf_720h)
-                        "carbon_eur_per_ton_ewma_720h",
-                        "carbon_eur_per_ton_ewma_2160h",
-                        "ttf_eur_per_mwh_ewma_2160h",
-                        "brent_usd_per_barrel_ewma_24h",
-                        "brent_usd_per_barrel_ewma_720h",
-                        "brent_usd_per_barrel_ewma_2160h",
-                        # Morning actuals (drop gesamt and photovoltaik)
-                        "stromverbrauch_gesamt_(netzlast)_d1_h0-10_mean",
-                        "stromerzeugung_photovoltaik_d1_h0-10_mean",
-                        # Low-importance rolling target stats
-                        "target_price_d30_d1_max",
-                        "target_price_d30_d1_min",
-                        "target_price_d7_d1_h8-19_mean",
-                    ],
-                ),
-            ),
+        ]
+    )
+
+    # Phase 11: Build exclude list for ColumnDropper
+    exclude = [
+        # Structural
+        "cross-border_*",
+        "net_export_*",
+        "month",
+        "month_sin",
+        "month_cos",
+        "regime_*",
+        # Leakage fixes
+        "stromverbrauch_residuallast",
+        "stromverbrauch_pumpspeicher",
+        # Low-importance temporal
+        "is_weekend",
+        "day_of_month",
+        "week_of_year",
+        # Degenerate / low-importance daily aggregates
+        "prognostizierte_erzeugung_wind_und_photovoltaik_daily_mean",
+        "prognostizierter_verbrauch_gesamt_daily_mean",
+        "prognostizierte_erzeugung_wind_und_photovoltaik_daily_sum",
+        "prognostizierter_verbrauch_gesamt_daily_sum",
+        "prognostizierter_verbrauch_gesamt_daily_max",
+        # Generation mix pct (low importance)
+        "pct_renewable",
+        "pct_biomasse",
+        "pct_braunkohle",
+        "pct_photovoltaik",
+        "pct_sonstige_erneuerbare",
+        "pct_steinkohle",
+        "pct_wind_onshore",
+        "pct_kernenergie",  # Nuclear decommissioned April 2023, permanently zero
+        "total_generation",
+        # Neighbour prices (keep frankreich/schweiz/niederlande/osterreich)
+        "marktpreis_belgien",
+        "marktpreis_dänemark_1",
+        "marktpreis_dänemark_2",
+        "marktpreis_italien_(nord)",
+        "marktpreis_norwegen_2",
+        "marktpreis_polen",
+        "marktpreis_schweden_4",
+        "marktpreis_slowenien",
+        "marktpreis_tschechien",
+        "marktpreis_ungarn",
+        # Neighbour EWMAs (keep frankreich only)
+        "marktpreis_belgien_ewma_*",
+        "marktpreis_niederlande_ewma_*",
+        "marktpreis_österreich_ewma_*",
+        # Generation actuals (keep wind_onshore/offshore, pv, erdgas)
+        "stromerzeugung_biomasse",
+        "stromerzeugung_braunkohle",
+        "stromerzeugung_kernenergie",
+        "stromerzeugung_pumpspeicher",
+        "stromerzeugung_sonstige_erneuerbare",
+        "stromerzeugung_sonstige_konventionelle",
+        "stromerzeugung_steinkohle",
+        "stromerzeugung_wasserkraft",
+        # Generation EWMA spans (keep one per source)
+        "stromerzeugung_wind_onshore_ewma_24h",
+        "stromerzeugung_wind_onshore_ewma_2160h",
+        "stromerzeugung_photovoltaik_ewma_24h",
+        "stromerzeugung_photovoltaik_ewma_168h",
+        "stromverbrauch_residuallast_ewma_168h",
+        "stromverbrauch_residuallast_ewma_2160h",
+        # Commodity EWMAs (keep carbon_24h, ttf_24h, ttf_720h)
+        "carbon_eur_per_ton_ewma_720h",
+        "carbon_eur_per_ton_ewma_2160h",
+        "ttf_eur_per_mwh_ewma_2160h",
+        "brent_usd_per_barrel_ewma_24h",
+        "brent_usd_per_barrel_ewma_720h",
+        "brent_usd_per_barrel_ewma_2160h",
+        # Low-importance rolling target stats
+        "target_price_d30_d1_max",
+        "target_price_d30_d1_min",
+        "target_price_d7_d1_h8-19_mean",
+    ]
+
+    steps.extend(
+        [
+            ("drop_cols", ColumnDropper(exclude=exclude)),
             # Phase 12: Time index features + interaction terms (after drop_cols)
             (
                 "day_index_interactions",
@@ -1322,6 +1372,7 @@ def preprocessor_v5_slim_hourly() -> "Pipeline":
         ]
     )
 
+    pipe = Pipeline(steps)
     validate_pipeline_leakage(pipe)
     return pipe
 
@@ -1331,11 +1382,17 @@ def preprocessor_v5_slim_hourly() -> "Pipeline":
 # =============================================================================
 
 
-def preprocessor_v5_full_hourly() -> "Pipeline":
+def preprocessor_v5_full_hourly(morning_cutoff_cet: int | None = 10) -> "Pipeline":
     """Maximal feature set hourly pipeline for feature selection experiments.
 
     Same phase structure as preprocessor_v5_slim_hourly() but with a minimal
     ColumnDropper: only leakage bugs and structural columns are removed.
+
+    Args:
+        morning_cutoff_cet: Hour (CET/CEST) up to which same-day actuals are
+            included. Use 10 (default, backward-compatible) for the original
+            behaviour, 7 for the production 7am cutoff, or None to disable
+            morning actuals entirely (uses D-2 cutoff for EWMA actuals instead).
 
     Returns:
         Unfitted sklearn Pipeline producing ~138 features + target column 'y'.
@@ -1358,6 +1415,8 @@ def preprocessor_v5_full_hourly() -> "Pipeline":
         SameHourLagTransformer,
     )
     from src.features.validation import validate_pipeline_leakage
+
+    tz = "Europe/Berlin"
 
     def add_price_ranges(X):
         X = X.copy()
@@ -1449,50 +1508,61 @@ def preprocessor_v5_full_hourly() -> "Pipeline":
             )
         )
 
-    pipe = Pipeline(
-        [
-            (
-                "rolling_target",
-                RollingStatsTransformer(
-                    columns=["target_price"],
-                    windows=[
-                        WindowSpec(start_day=-7, end_day=-7, agg="mean"),
-                        WindowSpec(start_day=-7, end_day=-1, agg="mean"),
-                        WindowSpec(start_day=-7, end_day=-1, agg="std"),
-                        WindowSpec(start_day=-7, end_day=-1, agg="max"),
-                        WindowSpec(start_day=-7, end_day=-1, agg="min"),
-                        WindowSpec(start_day=-7, end_day=-1, hours=list(range(8, 20)), agg="mean"),
-                        WindowSpec(start_day=-30, end_day=-1, agg="mean"),
-                        WindowSpec(start_day=-30, end_day=-1, agg="std"),
-                        WindowSpec(start_day=-30, end_day=-1, agg="min"),
-                        WindowSpec(start_day=-30, end_day=-1, agg="max"),
-                        WindowSpec(start_day=-2, end_day=-1, agg="std"),
-                        WindowSpec(start_day=-3, end_day=-1, agg="std"),
-                        # D-1 intra-day stats (single previous day)
-                        WindowSpec(start_day=-1, end_day=-1, agg="max"),
-                        WindowSpec(start_day=-1, end_day=-1, agg="min"),
-                        WindowSpec(start_day=-1, end_day=-1, agg="std"),
-                    ],
-                ),
+    # --- Build pipeline steps dynamically based on morning_cutoff_cet ---
+    steps = [
+        (
+            "rolling_target",
+            RollingStatsTransformer(
+                columns=["target_price"],
+                windows=[
+                    WindowSpec(start_day=-7, end_day=-7, agg="mean"),
+                    WindowSpec(start_day=-7, end_day=-1, agg="mean"),
+                    WindowSpec(start_day=-7, end_day=-1, agg="std"),
+                    WindowSpec(start_day=-7, end_day=-1, agg="max"),
+                    WindowSpec(start_day=-7, end_day=-1, agg="min"),
+                    WindowSpec(start_day=-7, end_day=-1, hours=list(range(8, 20)), agg="mean"),
+                    WindowSpec(start_day=-30, end_day=-1, agg="mean"),
+                    WindowSpec(start_day=-30, end_day=-1, agg="std"),
+                    WindowSpec(start_day=-30, end_day=-1, agg="min"),
+                    WindowSpec(start_day=-30, end_day=-1, agg="max"),
+                    WindowSpec(start_day=-2, end_day=-1, agg="std"),
+                    WindowSpec(start_day=-3, end_day=-1, agg="std"),
+                    # D-1 intra-day stats (single previous day)
+                    WindowSpec(start_day=-1, end_day=-1, agg="max"),
+                    WindowSpec(start_day=-1, end_day=-1, agg="min"),
+                    WindowSpec(start_day=-1, end_day=-1, agg="std"),
+                ],
             ),
+        ),
+        (
+            "ewma_prices",
+            EWMATransformer(
+                columns=["target_price", "marktpreis_frankreich"],
+                spans=[6, 24, 2160],
+                cutoff_day=-1,
+            ),
+        ),
+    ]
+
+    # EWMA target price with morning cutoff (skip for midnight variant)
+    if morning_cutoff_cet is not None:
+        steps.append(
             (
-                "ewma_prices",
+                "ewma_prices_morning",
                 EWMATransformer(
-                    columns=["target_price", "marktpreis_frankreich"],
+                    columns=["target_price"],
                     spans=[6, 24, 2160],
                     cutoff_day=-1,
+                    cutoff_hour=morning_cutoff_cet,
+                    col_suffix=f"_h{morning_cutoff_cet}",
+                    timezone=tz,
                 ),
-            ),
-            (
-                "ewma_prices_h10",
-                EWMATransformer(
-                    columns=["target_price"],
-                    spans=[6, 24, 2160],
-                    cutoff_day=-1,
-                    cutoff_hour=10,
-                    col_suffix="_h10",
-                ),
-            ),
+            )
+        )
+
+    # EWMA actuals — cutoff depends on variant
+    if morning_cutoff_cet is not None:
+        steps.append(
             (
                 "ewma_actuals",
                 EWMATransformer(
@@ -1503,22 +1573,46 @@ def preprocessor_v5_full_hourly() -> "Pipeline":
                     ],
                     spans=[24, 168, 2160],
                     cutoff_day=-1,
-                    cutoff_hour=10,
+                    cutoff_hour=morning_cutoff_cet,
+                    timezone=tz,
                 ),
-            ),
+            )
+        )
+    else:
+        # Midnight: no morning data, fall back to end of D-2
+        steps.append(
             (
-                "ewma_commodities",
+                "ewma_actuals",
                 EWMATransformer(
                     columns=[
-                        "carbon_eur_per_ton",
-                        "ttf_eur_per_mwh",
-                        "brent_usd_per_barrel",
+                        "stromverbrauch_residuallast",
+                        "stromerzeugung_wind_onshore",
+                        "stromerzeugung_photovoltaik",
                     ],
-                    spans=[24, 720, 2160],
+                    spans=[24, 168, 2160],
                     cutoff_day=-2,
                 ),
+            )
+        )
+
+    steps.append(
+        (
+            "ewma_commodities",
+            EWMATransformer(
+                columns=[
+                    "carbon_eur_per_ton",
+                    "ttf_eur_per_mwh",
+                    "brent_usd_per_barrel",
+                ],
+                spans=[24, 720, 2160],
+                cutoff_day=-2,
             ),
-            # Full pipeline keeps all 5 morning actual columns
+        )
+    )
+
+    # Full pipeline keeps all 5 morning actual columns (skip for midnight)
+    if morning_cutoff_cet is not None:
+        steps.append(
             (
                 "morning_actuals",
                 RollingStatsTransformer(
@@ -1530,11 +1624,21 @@ def preprocessor_v5_full_hourly() -> "Pipeline":
                         "stromerzeugung_photovoltaik",
                     ],
                     windows=[
-                        WindowSpec(start_day=-1, end_day=-1, hours=list(range(0, 11)), agg="mean"),
+                        WindowSpec(
+                            start_day=-1,
+                            end_day=-1,
+                            hours=list(range(0, morning_cutoff_cet)),
+                            agg="mean",
+                        ),
                     ],
                     overwrite=False,
+                    timezone=tz,
                 ),
-            ),
+            )
+        )
+
+    steps.extend(
+        [
             (
                 "total_flows",
                 FunctionTransformer(add_total_flows, validate=False),
@@ -1638,6 +1742,7 @@ def preprocessor_v5_full_hourly() -> "Pipeline":
                         "regime_*",
                         "stromverbrauch_residuallast",
                         "stromverbrauch_pumpspeicher",
+                        "pct_kernenergie",  # Nuclear decommissioned April 2023, permanently zero
                     ],
                 ),
             ),
@@ -1648,5 +1753,6 @@ def preprocessor_v5_full_hourly() -> "Pipeline":
         ]
     )
 
+    pipe = Pipeline(steps)
     validate_pipeline_leakage(pipe)
     return pipe
