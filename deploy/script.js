@@ -103,11 +103,15 @@
     if (history && history.length > 0) {
       var forecastX = [];
       var forecastY = [];
+      // Build set of dates present in actuals so forecast trace stays aligned
+      var actualDates = {};
+      actuals.days.forEach(function (day) { actualDates[day.date] = true; });
       // Sort by date to ensure continuity
       var sorted = history.slice().sort(function (a, b) {
         return a.date < b.date ? -1 : a.date > b.date ? 1 : 0;
       });
       sorted.forEach(function (entry) {
+        if (!actualDates[entry.date]) return;
         entry.prices.forEach(function (price, i) {
           forecastX.push(entry.date + " " + String(i).padStart(2, "0") + ":00");
           forecastY.push(price);
