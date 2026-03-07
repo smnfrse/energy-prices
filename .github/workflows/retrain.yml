@@ -40,7 +40,7 @@ jobs:
       - name: Update training data
         env:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
-        run: make update-data
+        run: make update
 
       - name: Retrain models
         env:
