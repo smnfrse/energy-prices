@@ -38,16 +38,21 @@ jobs:
           restore-keys: |
             data-cache-
 
+      - name: Bootstrap data on cache miss
+        if: steps.data-cache.outputs.cache-hit != 'true'
+        run: |
+          echo "Cache miss — downloading merged dataset from release"
+          mkdir -p data/processed
+          gh release download data-latest \
+            --pattern merged_dataset_hourly.parquet \
+            --dir data/processed
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Update training data
         env:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
-        run: |
-          if [ "${{ steps.data-cache.outputs.cache-hit }}" = "true" ]; then
-            make update
-          else
-            echo "Cache miss — running full data pipeline"
-            make data
-          fi
+        run: make update
 
       - name: Retrain models
         env:
