@@ -30,6 +30,7 @@ jobs:
         run: pip install -e .
 
       - name: Cache data directory
+        id: data-cache
         uses: actions/cache@v4
         with:
           path: data/
@@ -40,7 +41,13 @@ jobs:
       - name: Update training data
         env:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
-        run: make update
+        run: |
+          if [ "${{ steps.data-cache.outputs.cache-hit }}" = "true" ]; then
+            make update
+          else
+            echo "Cache miss — running full data pipeline"
+            make data
+          fi
 
       - name: Retrain models
         env:
