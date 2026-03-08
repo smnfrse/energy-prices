@@ -33,9 +33,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: data/
-          key: retrain-data-${{ github.run_number }}
+          key: data-cache-${{ github.run_number }}
           restore-keys: |
-            retrain-data-
+            data-cache-
 
       - name: Update training data
         env:

@@ -34,9 +34,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: data/
-          key: inference-data-${{ github.run_number }}
+          key: data-cache-${{ github.run_number }}
           restore-keys: |
-            inference-data-
+            data-cache-
 
       - name: Restore forecast history from gh-pages
         run: |
