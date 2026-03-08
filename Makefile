@@ -81,9 +81,9 @@ update: requirements
 	$(PYTHON_INTERPRETER) -m src.data.energy_charts
 	$(PYTHON_INTERPRETER) -m src.data.processing combine --resolution hour --incremental
 	$(PYTHON_INTERPRETER) -m src.data.commodities update
+	$(PYTHON_INTERPRETER) -m src.data.processing merge --resolution hour --incremental
 	$(PYTHON_INTERPRETER) -m src.data.commodities process \
 		--smard-path data/processed/merged_dataset_hourly.parquet
-	$(PYTHON_INTERPRETER) -m src.data.processing merge --resolution hour --incremental
 
 # Quarter-hourly data pipeline (currently unused; uncomment if 15-min resolution needed)
 # .PHONY: data-qh
