@@ -15,7 +15,15 @@
     "actual": "Actual",
     "no_data": "No forecast data available yet.",
     "reselection_warning": "Model degradation detected. Manual reselection recommended.",
-    "forecast_date": "Forecast Date"
+    "forecast_date": "Forecast Date",
+    "monitoring_link": "Model Monitoring",
+    "monitoring_title": "Model Monitoring",
+    "model_rmse_title": "Per-Model RMSE (30 Days)",
+    "composition_title": "Ensemble Composition",
+    "retrain_log_title": "Retrain Log",
+    "last_retrain": "Last retrain",
+    "mae_change": "Change",
+    "back_to_forecast": "Back to Forecast"
   },
   "de": {
     "title": "DE-LU Energiepreisprognose",
@@ -33,6 +41,14 @@
     "actual": "Tatsächlich",
     "no_data": "Noch keine Prognosedaten verfügbar.",
     "reselection_warning": "Modellverschlechterung erkannt. Manuelle Neuauswahl empfohlen.",
-    "forecast_date": "Prognosedatum"
+    "forecast_date": "Prognosedatum",
+    "monitoring_link": "Modell-Monitoring",
+    "monitoring_title": "Modell-Monitoring",
+    "model_rmse_title": "RMSE pro Modell (30 Tage)",
+    "composition_title": "Ensemble-Zusammensetzung",
+    "retrain_log_title": "Retraining-Verlauf",
+    "last_retrain": "Letztes Retraining",
+    "mae_change": "Änderung",
+    "back_to_forecast": "Zurück zur Prognose"
   }
 }

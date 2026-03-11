@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Model Monitoring — DE-LU Energy Price Forecast</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+</head>
+<body>
+
+  <header>
+    <div class="header-inner">
+      <div>
+        <h1 data-i18n="monitoring_title">Model Monitoring</h1>
+        <p class="subtitle" data-i18n="subtitle">Day-Ahead Electricity Price Prediction</p>
+      </div>
+      <div class="header-actions">
+        <a href="index.html" class="nav-link" data-i18n="back_to_forecast">Back to Forecast</a>
+        <button id="lang-toggle" class="lang-btn" aria-label="Toggle language">DE</button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+
+    <section class="card">
+      <h2 data-i18n="model_rmse_title">Per-Model RMSE (30 Days)</h2>
+      <div id="rmse-chart" class="chart-container">
+        <p class="no-data-msg" data-i18n="no_data">No forecast data available yet.</p>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2 data-i18n="composition_title">Ensemble Composition</h2>
+      <div id="composition-panel">
+        <div id="composition-chart" class="chart-container" style="min-height: 200px;">
+          <p class="no-data-msg" data-i18n="no_data">No forecast data available yet.</p>
+        </div>
+        <p id="composition-info" class="chart-meta"></p>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2 data-i18n="retrain_log_title">Retrain Log</h2>
+      <div id="retrain-log">
+        <p class="no-data-msg" data-i18n="no_data">No forecast data available yet.</p>
+      </div>
+    </section>
+
+  </main>
+
+  <script src="monitoring.js"></script>
+</body>
+</html>
