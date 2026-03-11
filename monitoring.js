@@ -8,6 +8,20 @@
 
   var DATA_BASE = "data/";
 
+  // Per-model unique colors (shade variants within each category)
+  var MODEL_COLORS = {
+    catboost_0: "#2563EB",
+    catboost_1: "#60A5FA",
+    lgbm_2: "#059669",
+    lgbm_3: "#34D399",
+    linear_4: "#7C3AED",
+    linear_5: "#A78BFA",
+    xgboost_6: "#D97706",
+    xgboost_7: "#FBBF24",
+    blend: "#EF4444",
+  };
+
+  // Fallback: category base colors for unknown model names
   var CATEGORY_COLORS = {
     catboost: "#3B82F6",
     lgbm: "#10B981",
@@ -15,6 +29,10 @@
     linear: "#8B5CF6",
     blend: "#EF4444",
   };
+
+  function colorFor(name, category) {
+    return MODEL_COLORS[name] || CATEGORY_COLORS[category] || "#6B7280";
+  }
 
   // --- Data loading ---
 
@@ -31,8 +49,8 @@
 
   function init() {
     fetchJSON("../translations.json")
-      .then(function (t) {
-        translations = t || {};
+      .then(function (tr) {
+        translations = tr || {};
         return Promise.all([
           fetchJSON("model_errors.json"),
           fetchJSON("metadata.json"),
@@ -44,24 +62,26 @@
         var metadata = results[1];
         var retrainHistory = results[2];
 
-        renderModelRmseChart(modelErrors, metadata, retrainHistory);
-        renderCompositionPanel(metadata);
-        renderRetrainLog(retrainHistory);
+        try { renderErrorChart(modelErrors, metadata, retrainHistory, "mae"); } catch (e) { console.error("MAE chart:", e); }
+        try { renderErrorChart(modelErrors, metadata, retrainHistory, "rmse"); } catch (e) { console.error("RMSE chart:", e); }
+        try { renderCompositionPanel(metadata); } catch (e) { console.error("Composition:", e); }
+        try { renderRetrainLog(retrainHistory); } catch (e) { console.error("Retrain log:", e); }
         setupLanguageToggle();
       });
   }
 
-  // --- Per-Model RMSE Trends ---
+  // --- Per-Model Error Trends (reused for MAE and RMSE) ---
 
-  function renderModelRmseChart(modelErrors, metadata, retrainHistory) {
-    var container = document.getElementById("rmse-chart");
+  function renderErrorChart(modelErrors, metadata, retrainHistory, metric) {
+    var container = document.getElementById(metric + "-chart");
     if (!modelErrors || !modelErrors.dates || modelErrors.dates.length === 0) return;
 
     container.innerHTML = "";
 
     var traces = [];
-    var rmse = modelErrors.rmse;
+    var values = modelErrors[metric];
     var dates = modelErrors.dates;
+    var label = metric.toUpperCase();
 
     // Get model categories from metadata for coloring
     var modelCategories = {};
@@ -72,35 +92,35 @@
     }
 
     // Add per-model traces
-    var modelNames = Object.keys(rmse).filter(function (k) { return k !== "blend"; });
+    var modelNames = Object.keys(values).filter(function (k) { return k !== "blend"; });
     modelNames.sort();
 
     modelNames.forEach(function (name) {
       var category = modelCategories[name] || "catboost";
       traces.push({
         x: dates,
-        y: rmse[name],
+        y: values[name],
         type: "scatter",
         mode: "lines+markers",
         name: name,
-        line: { width: 1.5, color: CATEGORY_COLORS[category] || "#6B7280" },
-        marker: { size: 4 },
+        line: { width: 1.5, color: colorFor(name, category) },
+        marker: { size: 5 },
         connectgaps: false,
-        hovertemplate: name + "<br>%{x}<br>RMSE: %{y:.2f}<extra></extra>",
+        hovertemplate: name + "<br>%{x}<br>" + label + ": %{y:.2f}<extra></extra>",
       });
     });
 
     // Add blend trace (bold)
-    if (rmse.blend) {
+    if (values.blend) {
       traces.push({
         x: dates,
-        y: rmse.blend,
+        y: values.blend,
         type: "scatter",
         mode: "lines+markers",
-        name: t("forecast") || "Blend",
-        line: { width: 3, color: CATEGORY_COLORS.blend },
-        marker: { size: 5 },
-        hovertemplate: "Blend<br>%{x}<br>RMSE: %{y:.2f}<extra></extra>",
+        name: "Blend",
+        line: { width: 3, color: MODEL_COLORS.blend },
+        marker: { size: 6 },
+        hovertemplate: "Blend<br>%{x}<br>" + label + ": %{y:.2f}<extra></extra>",
       });
     }
 
@@ -152,14 +172,12 @@
 
     var names = models.map(function (m) { return m.name; });
     var weights = models.map(function (m) { return m.weight; });
-    var colors = models.map(function (m) {
-      return CATEGORY_COLORS[m.category] || "#6B7280";
-    });
+    var colors = models.map(function (m) { return colorFor(m.name, m.category); });
     var hoverTexts = models.map(function (m) {
       return m.name + " (" + m.category + ")"
         + "<br>Weight: " + (m.weight * 100).toFixed(1) + "%"
-        + "<br>MAE: " + (m.holdout_mae != null ? m.holdout_mae.toFixed(2) : "—")
-        + "<br>RMSE: " + (m.holdout_rmse != null ? m.holdout_rmse.toFixed(2) : "—");
+        + "<br>MAE: " + (m.holdout_mae != null ? m.holdout_mae.toFixed(2) : "\u2014")
+        + "<br>RMSE: " + (m.holdout_rmse != null ? m.holdout_rmse.toFixed(2) : "\u2014");
     });
 
     var trace = {
@@ -195,16 +213,19 @@
       parts.push("Blend MAE: " + metadata.blend_mae.toFixed(2));
     }
     if (metadata.needs_reselection) {
-      parts.push("⚠ " + t("reselection_warning"));
+      parts.push("\u26A0 " + t("reselection_warning"));
     }
-    infoEl.textContent = parts.join(" · ");
+    infoEl.textContent = parts.join(" \u00B7 ");
   }
 
   // --- Retrain Log ---
 
   function renderRetrainLog(retrainHistory) {
     var container = document.getElementById("retrain-log");
-    if (!retrainHistory || retrainHistory.length === 0) return;
+    if (!retrainHistory || retrainHistory.length === 0) {
+      container.innerHTML = '<p class="no-data-msg">' + t("no_retrain_data") + "</p>";
+      return;
+    }
 
     // Show last 5 events, newest first
     var events = retrainHistory.slice(-5).reverse();
@@ -222,7 +243,7 @@
       var rowClass = event.needs_reselection ? ' class="degraded"' : "";
       html += "<tr" + rowClass + ">";
       html += "<td>" + dateStr + "</td>";
-      html += "<td>" + event.old_blend_mae.toFixed(2) + " → " + event.new_blend_mae.toFixed(2) + "</td>";
+      html += "<td>" + event.old_blend_mae.toFixed(2) + " \u2192 " + event.new_blend_mae.toFixed(2) + "</td>";
       var sign = event.degradation_pct > 0 ? "+" : "";
       html += "<td>" + sign + event.degradation_pct.toFixed(1) + "%</td>";
       html += "<td>" + event.n_models + "</td>";
