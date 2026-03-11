@@ -18,12 +18,14 @@
     "forecast_date": "Forecast Date",
     "monitoring_link": "Model Monitoring",
     "monitoring_title": "Model Monitoring",
+    "model_mae_title": "Per-Model MAE (30 Days)",
     "model_rmse_title": "Per-Model RMSE (30 Days)",
     "composition_title": "Ensemble Composition",
     "retrain_log_title": "Retrain Log",
     "last_retrain": "Last retrain",
     "mae_change": "Change",
-    "back_to_forecast": "Back to Forecast"
+    "back_to_forecast": "Back to Forecast",
+    "no_retrain_data": "No retrain events recorded yet."
   },
   "de": {
     "title": "DE-LU Energiepreisprognose",
@@ -44,11 +46,13 @@
     "forecast_date": "Prognosedatum",
     "monitoring_link": "Modell-Monitoring",
     "monitoring_title": "Modell-Monitoring",
+    "model_mae_title": "MAE pro Modell (30 Tage)",
     "model_rmse_title": "RMSE pro Modell (30 Tage)",
     "composition_title": "Ensemble-Zusammensetzung",
     "retrain_log_title": "Retraining-Verlauf",
     "last_retrain": "Letztes Retraining",
     "mae_change": "Änderung",
-    "back_to_forecast": "Zurück zur Prognose"
+    "back_to_forecast": "Zurück zur Prognose",
+    "no_retrain_data": "Noch keine Retraining-Ereignisse aufgezeichnet."
   }
 }
