@@ -20,7 +20,7 @@ import mlflow
 import numpy as np
 import pandas as pd
 
-from src.config import MLFLOW_TRACKING_URI, PROJ_ROOT, get_path
+from src.config import MLFLOW_TRACKING_URI, MODELS_DIR, PROJ_ROOT, get_path
 from src.modeling.blend import _flatten_daily_to_hourly, load_blend
 
 DEPLOY_DATA_DIR = PROJ_ROOT / "deploy" / "data"
@@ -89,8 +89,20 @@ def run_inference(skip_update: bool = False) -> dict:
     generated_at = datetime.now(timezone.utc).isoformat()
 
     result = _write_output(
-        forecast_hourly, forecast_timestamps, forecast_date, actuals, config, generated_at
+        forecast_hourly,
+        forecast_timestamps,
+        forecast_date,
+        actuals,
+        config,
+        generated_at,
+        all_preds,
     )
+
+    # Compute per-model errors from forecast history + full actuals
+    _compute_model_errors(df_full)
+
+    # Copy retrain_history.json to deploy/data/ if it exists
+    _copy_retrain_history()
 
     # Write snapshots
     _write_feature_snapshots(snapshot_data, forecast_date, generated_at)
@@ -505,8 +517,15 @@ def _write_output(
     actuals: list[dict],
     config: dict,
     generated_at: str,
+    all_preds: list[np.ndarray] | None = None,
 ) -> dict:
     """Write JSON output files to deploy/data/."""
+    # Build per-model predictions dict
+    model_predictions = {}
+    if all_preds:
+        for pred, info in zip(all_preds, config["models"]):
+            model_predictions[info["name"]] = [round(float(p), 2) for p in pred[:24]]
+
     # forecast_latest.json
     forecast_data = {
         "date": forecast_date,
@@ -531,21 +550,38 @@ def _write_output(
         "forecast_date": forecast_date,
         "blend_mae": config.get("blend_mae"),
         "blend_rmse": config.get("blend_rmse"),
+        "blend_me": config.get("blend_me"),
         "blend_r2": config.get("blend_r2"),
         "n_models": len(config["models"]),
         "needs_reselection": config.get("needs_reselection", False),
         "model_categories": list({m["category"] for m in config["models"]}),
+        "last_retrain": config.get("updated"),
+        "model_details": [
+            {
+                "name": m["name"],
+                "category": m["category"],
+                "weight": m["weight"],
+                "holdout_mae": m.get("holdout_mae"),
+                "holdout_rmse": m.get("holdout_rmse"),
+            }
+            for m in config["models"]
+        ],
     }
     _write_json(DEPLOY_DATA_DIR / "metadata.json", metadata)
 
     # Append to forecast_history.json (last 30 days)
-    _append_history(forecast_date, forecast, generated_at)
+    _append_history(forecast_date, forecast, generated_at, model_predictions)
 
     logger.info("Written forecast_latest.json, actuals_latest.json, metadata.json")
     return forecast_data
 
 
-def _append_history(forecast_date: str, forecast: np.ndarray, generated_at: str) -> None:
+def _append_history(
+    forecast_date: str,
+    forecast: np.ndarray,
+    generated_at: str,
+    model_predictions: dict | None = None,
+) -> None:
     """Append forecast to history file, keeping last HISTORY_MAX_DAYS entries."""
     history = []
     if HISTORY_FILE.exists():
@@ -556,13 +592,14 @@ def _append_history(forecast_date: str, forecast: np.ndarray, generated_at: str)
 
     # Remove existing entry for same date then append updated one
     history = [h for h in history if h["date"] != forecast_date]
-    history.append(
-        {
-            "date": forecast_date,
-            "generated_at": generated_at,
-            "prices": [round(float(p), 2) for p in forecast],
-        }
-    )
+    entry = {
+        "date": forecast_date,
+        "generated_at": generated_at,
+        "prices": [round(float(p), 2) for p in forecast],
+    }
+    if model_predictions:
+        entry["model_predictions"] = model_predictions
+    history.append(entry)
 
     history = sorted(history, key=lambda h: h["date"])[-HISTORY_MAX_DAYS:]
     _write_json(HISTORY_FILE, history)
@@ -572,6 +609,89 @@ def _write_json(path: Path, data) -> None:
     """Write JSON file, creating parent dirs as needed."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+
+
+def _compute_model_errors(df_full: pd.DataFrame) -> None:
+    """Compute per-model daily RMSE/MAE from forecast history and actuals in df_full."""
+    if not HISTORY_FILE.exists():
+        return
+    try:
+        history = json.loads(HISTORY_FILE.read_text())
+    except (json.JSONDecodeError, ValueError):
+        return
+
+    if "target_price" not in df_full.columns:
+        return
+
+    # Build actuals lookup from df_full (up to 30 days of complete data)
+    df = df_full.copy()
+    if hasattr(df.index, "tz_convert"):
+        df.index = df.index.tz_convert("Europe/Berlin")
+    df["date"] = df.index.date
+
+    actuals_by_date: dict[str, np.ndarray] = {}
+    for date, group in df.groupby("date"):
+        prices = group["target_price"].values
+        if len(prices) == 24 and not np.any(np.isnan(prices.astype(float))):
+            actuals_by_date[str(date)] = prices
+
+    # Collect all model names across history
+    all_model_names: set[str] = set()
+    for entry in history:
+        if "model_predictions" in entry:
+            all_model_names.update(entry["model_predictions"].keys())
+
+    dates: list[str] = []
+    rmse: dict[str, list] = defaultdict(list)
+    mae: dict[str, list] = defaultdict(list)
+
+    for entry in sorted(history, key=lambda h: h["date"]):
+        date = entry["date"]
+        if date not in actuals_by_date:
+            continue
+
+        actual = actuals_by_date[date]
+        dates.append(date)
+
+        # Blend errors (always available)
+        forecast = np.array(entry["prices"])
+        diff = forecast - actual
+        rmse["blend"].append(round(float(np.sqrt(np.mean(diff**2))), 2))
+        mae["blend"].append(round(float(np.mean(np.abs(diff))), 2))
+
+        # Per-model errors (only for entries with model_predictions)
+        model_preds = entry.get("model_predictions", {})
+        for model_name in all_model_names:
+            if model_name in model_preds:
+                pred_arr = np.array(model_preds[model_name])
+                diff = pred_arr - actual
+                rmse[model_name].append(round(float(np.sqrt(np.mean(diff**2))), 2))
+                mae[model_name].append(round(float(np.mean(np.abs(diff))), 2))
+            else:
+                rmse[model_name].append(None)
+                mae[model_name].append(None)
+
+    if not dates:
+        return
+
+    result = {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "dates": dates,
+        "rmse": dict(rmse),
+        "mae": dict(mae),
+    }
+    _write_json(DEPLOY_DATA_DIR / "model_errors.json", result)
+    logger.info(f"Written model_errors.json ({len(dates)} dates)")
+
+
+def _copy_retrain_history() -> None:
+    """Copy retrain_history.json from models/production/ to deploy/data/."""
+    import shutil
+
+    src = MODELS_DIR / "production" / "retrain_history.json"
+    if src.exists():
+        shutil.copy2(src, DEPLOY_DATA_DIR / "retrain_history.json")
+        logger.info("Copied retrain_history.json to deploy/data/")
 
 
 # --- CLI ---

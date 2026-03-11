@@ -63,7 +63,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add models/production/blend_config.json models/production/*.joblib
+          git add models/production/blend_config.json models/production/*.joblib models/production/retrain_history.json
           git diff --staged --quiet || git commit -m "chore: retrain blend models [skip ci]"
           git push
 

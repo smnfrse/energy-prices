@@ -24,7 +24,7 @@ import pandas as pd
 from sklearn.base import clone
 from sklearn.metrics import mean_absolute_error, r2_score
 
-from src.config import MLFLOW_TRACKING_URI, MODELS_DIR
+from src.config import MLFLOW_TRACKING_URI, MODELS_DIR, get_path
 from src.config.modeling import (
     BLEND_CANDIDATES_RANDOM,
     BLEND_CANDIDATES_RANDOM_POOL,
@@ -37,6 +37,8 @@ from src.config.modeling import (
 
 PRODUCTION_DIR = MODELS_DIR / "production"
 BLEND_CONFIG_PATH = PRODUCTION_DIR / "blend_config.json"
+RETRAIN_HISTORY_PATH = PRODUCTION_DIR / "retrain_history.json"
+RETRAIN_HISTORY_MAX = 52
 
 
 # =============================================================================
@@ -83,7 +85,13 @@ def _compute_inverse_mae_weights(maes: np.ndarray) -> np.ndarray:
 
 
 def _load_datasets(model_infos: list[dict]) -> dict[str, tuple]:
-    """Load and cache datasets by dataset_run_id.
+    """Load datasets by reconstructing from merged data + pre-exported pipelines.
+
+    For each unique dataset_run_id:
+    1. Load unfitted pipeline from models/production/pipeline_{id[:8]}/
+    2. fit_transform the full merged dataset
+    3. Split into X (features) and y (targets)
+    4. Select feature subset per metadata's feature_names_out
 
     Args:
         model_infos: List of dicts, each containing 'dataset_run_id'.
@@ -91,15 +99,65 @@ def _load_datasets(model_infos: list[dict]) -> dict[str, tuple]:
     Returns:
         Dict mapping dataset_run_id → (X, y_values).
     """
-    from src.features.preprocessors import load_dataset
+    merged_df = pd.read_parquet(get_path("merged", "hour"))
 
     cache: dict[str, tuple] = {}
     for info in model_infos:
         run_id = info["dataset_run_id"]
-        if run_id not in cache:
-            logger.info(f"Loading dataset {run_id[:8]}...")
-            X, y_df, _ = load_dataset(run_id=run_id)
-            cache[run_id] = (X, y_df.values)
+        if run_id in cache:
+            continue
+
+        logger.info(f"Reconstructing dataset {run_id[:8]}...")
+
+        # Load metadata
+        meta_path = PRODUCTION_DIR / f"metadata_{run_id[:8]}.json"
+        metadata = json.loads(meta_path.read_text())
+        feature_names_out = metadata.get("feature_names_out", [])
+        source_run_id = metadata.get("source_run_id")
+
+        # Load pipeline (try dataset_run_id, then source_run_id)
+        pipeline = None
+        for rid in filter(None, [run_id, source_run_id]):
+            local_path = PRODUCTION_DIR / f"pipeline_{rid[:8]}"
+            if local_path.exists():
+                pipeline = mlflow.sklearn.load_model(str(local_path))
+                logger.info(f"  Loaded pipeline from {local_path.name}")
+                break
+        if pipeline is None:
+            raise FileNotFoundError(
+                f"No pipeline found for dataset {run_id[:8]}. "
+                f"Export via 'python -m src.deploy.export_pipelines'."
+            )
+
+        # Apply pipeline to merged data
+        X_transformed = pipeline.fit_transform(merged_df)
+
+        # Split into X and y
+        y_cols = X_transformed.filter(regex=r"^y(_\d+)?$").columns.tolist()
+        y = X_transformed[y_cols]
+        X = X_transformed.drop(columns=y_cols)
+
+        # Drop rows where any target is NaN (matches build_pipeline behaviour)
+        valid_mask = ~y.isna().any(axis=1)
+        n_dropped = (~valid_mask).sum()
+        if n_dropped > 0:
+            logger.info(f"  Dropped {n_dropped} rows with NaN targets")
+            X = X[valid_mask]
+            y = y[valid_mask]
+
+        # Select feature subset
+        if feature_names_out:
+            available = [c for c in feature_names_out if c in X.columns]
+            if len(available) < len(feature_names_out):
+                logger.warning(
+                    f"  {len(feature_names_out) - len(available)} features "
+                    f"missing from transformed data"
+                )
+            X = X[available]
+
+        logger.info(f"  Dataset {run_id[:8]}: X={X.shape}, y={y.shape}")
+        cache[run_id] = (X, y.values)
+
     return cache
 
 
@@ -634,6 +692,7 @@ def retrain_blend(holdout_days: int | None = None) -> dict:
     config["updated"] = datetime.now(timezone.utc).isoformat()
 
     _log_blend_to_mlflow(config, y_ref, y_blend)
+    _append_retrain_history(old_blend_mae, config)
     logger.success("Full retrain complete")
     _print_summary(config)
     return config
@@ -700,6 +759,38 @@ def predict_blend(
 # =============================================================================
 # Internal helpers
 # =============================================================================
+
+
+def _append_retrain_history(old_blend_mae: float, config: dict) -> None:
+    """Append retrain event to retrain_history.json (kept in models/production/)."""
+    history = []
+    if RETRAIN_HISTORY_PATH.exists():
+        try:
+            history = json.loads(RETRAIN_HISTORY_PATH.read_text())
+        except (json.JSONDecodeError, ValueError):
+            logger.warning("Corrupt retrain_history.json, starting fresh")
+
+    new_blend_mae = config["blend_mae"]
+    degradation_pct = (
+        round((new_blend_mae - old_blend_mae) / old_blend_mae * 100, 1)
+        if old_blend_mae > 0
+        else 0.0
+    )
+
+    history.append(
+        {
+            "date": config["updated"],
+            "old_blend_mae": round(old_blend_mae, 4),
+            "new_blend_mae": new_blend_mae,
+            "degradation_pct": degradation_pct,
+            "needs_reselection": config.get("needs_reselection", False),
+            "n_models": len(config["models"]),
+        }
+    )
+
+    history = history[-RETRAIN_HISTORY_MAX:]
+    RETRAIN_HISTORY_PATH.write_text(json.dumps(history, indent=2))
+    logger.info(f"Retrain history appended ({len(history)} entries)")
 
 
 def _log_blend_to_mlflow(config: dict, y_ref: np.ndarray, y_blend: np.ndarray) -> None:
