@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-03-11T19:24:10.975579+00:00",
+  "generated_at": "2026-03-11T19:43:01.895445+00:00",
   "dates": [
     "2026-02-25",
     "2026-02-26",
@@ -55,7 +55,7 @@
       null,
       8.13
     ],
-    "linear_4": [
+    "lgbm_2": [
       null,
       null,
       null,
@@ -71,61 +71,7 @@
       null,
       null,
       null,
-      31.93
-    ],
-    "linear_5": [
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      31.78
-    ],
-    "xgboost_6": [
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      21.37
-    ],
-    "xgboost_7": [
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      19.01
+      11.87
     ],
     "lgbm_3": [
       null,
@@ -145,7 +91,7 @@
       null,
       11.55
     ],
-    "lgbm_2": [
+    "xgboost_6": [
       null,
       null,
       null,
@@ -161,7 +107,7 @@
       null,
       null,
       null,
-      11.87
+      21.37
     ],
     "catboost_0": [
       null,
@@ -180,6 +126,60 @@
       null,
       null,
       12.04
+    ],
+    "linear_4": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      31.93
+    ],
+    "xgboost_7": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      19.01
+    ],
+    "linear_5": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      31.78
     ]
   },
   "mae": {
@@ -219,7 +219,7 @@
       null,
       6.12
     ],
-    "linear_4": [
+    "lgbm_2": [
       null,
       null,
       null,
@@ -235,61 +235,7 @@
       null,
       null,
       null,
-      22.69
-    ],
-    "linear_5": [
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      22.47
-    ],
-    "xgboost_6": [
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      10.29
-    ],
-    "xgboost_7": [
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      9.48
+      6.86
     ],
     "lgbm_3": [
       null,
@@ -309,7 +255,7 @@
       null,
       7.4
     ],
-    "lgbm_2": [
+    "xgboost_6": [
       null,
       null,
       null,
@@ -325,7 +271,7 @@
       null,
       null,
       null,
-      6.86
+      10.29
     ],
     "catboost_0": [
       null,
@@ -344,6 +290,60 @@
       null,
       null,
       9.99
+    ],
+    "linear_4": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      22.69
+    ],
+    "xgboost_7": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      9.48
+    ],
+    "linear_5": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      22.47
     ]
   }
 }
