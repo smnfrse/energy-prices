@@ -45,7 +45,8 @@ jobs:
           mkdir -p data/processed
           gh release download data-latest \
             --pattern merged_dataset_hourly.parquet \
-            --dir data/processed
+            --dir data/processed \
+            --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
