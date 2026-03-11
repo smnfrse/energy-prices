@@ -52,7 +52,7 @@ weight_i = (1 / MAE_i) / sum(1 / MAE_j for all j)
 ```
 
 **GitHub Actions automation:**
-- `daily_forecast.yml` — runs at 08:00 UTC daily: `make add-data` → inference → updates `deploy/data/`
+- `daily_forecast.yml` — runs at 19:00 UTC daily: `make add-data` → inference → updates `deploy/data/`
 - `retrain.yml` — runs at 06:00 UTC on the 1st and 15th of each month: full model retrain + blend weight refresh
 
 **Dashboard**: Available at GitHub Pages — 24-hour day-ahead forecast with 7-day actuals overlay, EN/DE toggle.
@@ -182,6 +182,7 @@ See [DATA.md](DATA.md) for detailed documentation on data sources, structural br
   - SMARD resolution change: Oct 2025 switch from hourly → quarter-hourly requires regime handling
 - **Modeling scope**: Single global hourly model; no intra-day or probabilistic forecasts
 - **Forecast horizon**: 24-hour day-ahead only; next-day prices published at ~12:00 CET (D-1 auction)
+- **Forecast timing**: SMARD publishes forecasted generation at ~18:00 CET, after the day-ahead auction (~12:00 CET). The pipeline currently runs at 20:00 CET as an interim measure to ensure complete input data; a solution for timely access to TSO forecasts is in progress. The project serves as a demonstration of the ML pipeline
 
 ## Future Plans
 
