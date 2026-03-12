@@ -1,75 +1,75 @@
 {
-  "last_updated": "2026-03-11T19:43:01.639074+00:00",
-  "forecast_date": "2026-03-12",
-  "blend_mae": 10.9298,
-  "blend_rmse": 16.543,
-  "blend_me": -0.9418,
-  "blend_r2": 0.7376,
+  "last_updated": "2026-03-12T19:43:22.279457+00:00",
+  "forecast_date": "2026-03-13",
+  "blend_mae": 9.2511,
+  "blend_rmse": 14.4691,
+  "blend_me": -2.5106,
+  "blend_r2": 0.8364,
   "n_models": 8,
   "needs_reselection": false,
   "model_categories": [
-    "lgbm",
-    "xgboost",
     "linear",
-    "catboost"
+    "catboost",
+    "xgboost",
+    "lgbm"
   ],
-  "last_retrain": "2026-03-03T09:48:11.665191+00:00",
+  "last_retrain": "2026-03-11T22:02:22.096954+00:00",
   "model_details": [
     {
       "name": "catboost_0",
       "category": "catboost",
-      "weight": 0.140843,
-      "holdout_mae": 8.9999,
-      "holdout_rmse": 14.1249
+      "weight": 0.130116,
+      "holdout_mae": 10.1161,
+      "holdout_rmse": 15.3688
     },
     {
       "name": "catboost_1",
       "category": "catboost",
-      "weight": 0.139997,
-      "holdout_mae": 9.0543,
-      "holdout_rmse": 14.4594
+      "weight": 0.13369,
+      "holdout_mae": 9.8457,
+      "holdout_rmse": 15.1901
     },
     {
       "name": "lgbm_2",
       "category": "lgbm",
-      "weight": 0.128123,
-      "holdout_mae": 9.8934,
-      "holdout_rmse": 15.1553
+      "weight": 0.13015,
+      "holdout_mae": 10.1135,
+      "holdout_rmse": 15.501
     },
     {
       "name": "lgbm_3",
       "category": "lgbm",
-      "weight": 0.132791,
-      "holdout_mae": 9.5456,
-      "holdout_rmse": 14.7485
+      "weight": 0.131023,
+      "holdout_mae": 10.0461,
+      "holdout_rmse": 15.4379
     },
     {
       "name": "linear_4",
       "category": "linear",
-      "weight": 0.098263,
-      "holdout_mae": 12.8998,
-      "holdout_rmse": 20.5612
+      "weight": 0.109594,
+      "holdout_mae": 12.0105,
+      "holdout_rmse": 17.3107
     },
     {
       "name": "linear_5",
       "category": "linear",
-      "weight": 0.100385,
-      "holdout_mae": 12.6271,
-      "holdout_rmse": 20.3619
+      "weight": 0.112233,
+      "holdout_mae": 11.7281,
+      "holdout_rmse": 17.0804
     },
     {
       "name": "xgboost_6",
       "category": "xgboost",
-      "weight": 0.131609,
-      "holdout_mae": 9.6313,
-      "holdout_rmse": 14.1637
+      "weight": 0.129834,
+      "holdout_mae": 10.1381,
+      "holdout_rmse": 15.1459
     },
     {
       "name": "xgboost_7",
       "category": "xgboost",
-      "weight": 0.127989,
-      "holdout_mae": 9.9037,
-      "holdout_rmse": 14.61
+      "weight": 0.123359,
+      "holdout_mae": 10.6703,
+      "holdout_rmse": 15.7319
     }
   ]
 }

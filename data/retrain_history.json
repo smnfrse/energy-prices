@@ -1,0 +1,10 @@
+[
+  {
+    "date": "2026-03-11T22:02:22.096954+00:00",
+    "old_blend_mae": 10.9298,
+    "new_blend_mae": 9.2511,
+    "degradation_pct": -15.4,
+    "needs_reselection": false,
+    "n_models": 8
+  }
+]
