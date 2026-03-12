@@ -8,6 +8,15 @@ Predicting hourly day-ahead electricity prices in the Germany/Luxembourg (DE-LU)
 
 Day-ahead electricity prices are determined by auction at noon for all 24 hours of the following day. Accurate forecasts enable better trading decisions, grid management, and renewable integration planning. This project builds a complete ML pipeline from raw market data to production-ready predictions.
 
+## Acknowledgements
+
+I have drawn significantly on two repos to produce this project and want to give my thanks to their authors: energy-market-analysis https://github.com/vsevolodnedora/energy_market_analysis from Vsevolod Nedora and Modern Times Series Forecasting from Manu Joseph https://github.com/PacktPublishing/Modern-Time-Series-Forecasting-with-Python. I also want to thank all the instructors at the WBS coding school.
+
+
+## Limitations
+
+The modelling conducted here has the major limitation that it is constructed using exclusively free data sources. This means that it is missing full data on commodity markets, I only use an imperfect reconstruction of daily closing commodity prices rather than any information about trading volumes, prices or volatility during the day, or futures. Similarly, I was only able to use day-ahead prices rather than any information about intraday prices, or energy futures. Without this information you are missing a significant part of the infomation that drives electricity markets
+
 ## Methodology
 
 **Data Sources:**
@@ -166,37 +175,20 @@ make format   # Auto-format code
 ### SMARD API (Primary)
 Official German energy market data from Bundesnetzagentur. Covers generation by source, consumption, cross-border physical flows, and day-ahead market prices. Hourly resolution from December 2014 to present.
 
-### Commodity Prices (External)
+### Commodity Prices
 - **EU Carbon Allowances**: ICAP Carbon Action (Nov 2014 – present, ~2 month publication lag filled with CO2.L equity proxy, bias +1.08 EUR/ton)
 - **TTF Natural Gas Futures**: Yahoo Finance (Oct 2017 – present), gap-filled Dec 2014 – Oct 2017 via FRED EU monthly + US Henry Hub daily reconstruction
 - **Brent Crude Oil**: Yahoo Finance (Jan 2021 – present)
 
 See [DATA.md](DATA.md) for detailed documentation on data sources, structural breaks, missing value handling, and commodity price reconstruction methodology.
 
-## Limitations
-
-- **Data availability gaps**:
-  - Carbon (ICAP EUA): ~2-month publication lag; mitigated with CO2.L equity proxy (bias +1.08 EUR/ton)
-  - TTF Natural Gas: Dec 2014–Oct 2017 gap reconstructed via FRED (estimates, not traded prices)
-  - Brent Crude: ~54% missing values (structural gap before Jan 2021); treated as optional feature
-  - SMARD resolution change: Oct 2025 switch from hourly → quarter-hourly requires regime handling
-- **Modeling scope**: Single global hourly model; no intra-day or probabilistic forecasts
-- **Forecast horizon**: 24-hour day-ahead only; next-day prices published at ~12:00 CET (D-1 auction)
-- **Forecast timing**: SMARD publishes forecasted generation at ~18:00 CET, after the day-ahead auction (~12:00 CET). The pipeline currently runs at 20:00 CET as an interim measure to ensure complete input data; a solution for timely access to TSO forecasts is in progress. The project serves as a demonstration of the ML pipeline
-
 ## Future Plans
 
-- Longer forecast horizons (week-ahead, month-ahead)
+- Longer forecast horizon
 - Deep learning models (LSTM, Temporal Fusion Transformer)
 - Probabilistic forecasts (prediction intervals)
 - Multi-region models (per-neighbour bidding area)
 - Intra-day price forecasting
-
-## Acknowledgements
-
-- **SMARD / Bundesnetzagentur** — primary energy market data source
-- **FRED / St. Louis Fed** — TTF gas historical reconstruction (PNGASEUUSDM, DHHNGSP)
-- **ICAP Carbon Action** — EU ETS carbon price historical data
 
 ## License
 
