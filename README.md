@@ -15,42 +15,29 @@ I have drawn significantly on two repos to produce this project and want to give
 
 ## Limitations
 
-The modelling conducted here has the major limitation that it is constructed using exclusively free data sources. This means that it is missing full data on commodity markets, I only use an imperfect reconstruction of daily closing commodity prices rather than any information about trading volumes, prices or volatility during the day, or futures. Similarly, I was only able to use day-ahead prices rather than any information about intraday prices, or energy futures. Without this information you are missing a significant part of the infomation that drives electricity markets
+This repo has a major limitation in that it uses exclusively free data sources. This means that it is missing full data on commodity and electricity markets. I could only use an imperfect reconstruction of daily closing commodity prices rather than any information about trading volumes, prices or volatility during the day, or futures. Similarly, I was only able to use day-ahead prices rather than any information about intraday prices, or energy futures. Without this information you are missing significant drivers of electricity markets and the forecasts would likely improve with access to this information.
 
 ## Methodology
 
 **Data Sources:**
 - **SMARD API** (Bundesnetzagentur): Power generation by source, consumption, cross-border physical flows, market prices, and TSO forecasts. Hourly resolution, Dec 2014 – present.
-- **Commodity prices**: EU carbon allowances (ICAP), TTF natural gas futures (Yahoo Finance), Brent crude oil futures (Yahoo Finance).
+- **Commodity prices**: EU carbon allowances (ICAP), TTF natural gas futures (Yahoo Finance & FRED), Brent crude oil futures (Yahoo Finance).
 
 **Feature Engineering:**
 - Temporal features (cyclical hour/day encoding, holidays)
 - Lagged price statistics (rolling mean/std/min/max over 7d and 30d windows)
-- EWMA signals with information-cutoff-aware computation
+- Exponentially weighted averages with different spans
 - Same-hour lags (D-1, D-2, D-7, D-14)
 - Generation mix percentages, supply-demand gap
 - Cross-border flow aggregates (total imports/exports)
-- Commodity price EWMAs with appropriate lag
+
 
 All transformations are implemented as sklearn-compatible transformers with built-in leakage validation.
 
 **Models:**
 - Baselines: naive persistence, ARIMA, ETS, Prophet
-- LightGBM and CatBoost with hourly global model architecture
+- Ridge, Lasso, Elasticnet, LightGBM, XGboost, CatBoost with hourly global model architecture
 - Versioned preprocessing pipelines (v2–v5) for systematic ablation
-
-## Key Results
-
-Blend ensemble on 90-day holdout (as of 2026-02-20):
-
-| Model | RMSE (EUR/MWh) | MAE (EUR/MWh) |
-|-------|----------------|---------------|
-| XGBoost (best single) | 18.83 | 10.45 |
-| LightGBM (best single) | 19.32 | 10.32 |
-| CatBoost (best single) | 20.18 | 11.14 |
-| **Blend ensemble (8 models)** | **18.52** | **9.86** |
-
-See the live dashboard for up-to-date forecasts vs actuals.
 
 ## Production Deployment
 
