@@ -29,6 +29,8 @@ MLFLOW_ARTIFACT_ROOT = MODELS_DIR / "mlruns"
 # This prevents MLflow from creating mlruns/ in the current working directory
 os.environ["MLFLOW_DEFAULT_ARTIFACT_ROOT"] = str(MLFLOW_ARTIFACT_ROOT.absolute())
 
+EMA_DATA_DIR = DATA_DIR / "ema"
+
 REPORTS_DIR = PROJ_ROOT / "reports"
 FIGURES_DIR = REPORTS_DIR / "figures"
 

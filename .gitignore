@@ -1,6 +1,9 @@
 # Data
 /data/
 
+# Ad-hoc analysis scripts (not production code)
+/scripts/
+
 # Reference repositories
 /reference_repos/
 
