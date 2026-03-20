@@ -60,22 +60,25 @@ def backfill(days: int = 8) -> None:
     logger.info(f"Existing history: {len(history)} entries ({sorted(existing_dates)})")
 
     # Generate forecasts for each target date.
-    # Forecast date D predicts prices for day D using data through D-1 (CET).
+    # Production inference includes rows for the forecast day D itself because SMARD
+    # publishes day-ahead generation/load forecasts by ~18:00 CET on D-1. The model
+    # uses D's forecast features (prognostizierte_*) to predict D's prices. To match
+    # production, the cutoff must include D's rows — but with target_price NaN'd out
+    # to avoid leakage (in production, prices aren't published at forecast time).
     # Cap at tomorrow (same as production inference) — we can't forecast further out.
     import zoneinfo
 
     generated_at = datetime.now(timezone.utc).isoformat()
     tz = zoneinfo.ZoneInfo("Europe/Berlin")
     tomorrow_cet = datetime.now(tz).date() + timedelta(days=1)
-    latest_forecast = min(last_cet + timedelta(days=1), tomorrow_cet)
+    latest_forecast = min(last_cet, tomorrow_cet)
     target_dates = [latest_forecast - timedelta(days=i) for i in range(days - 1, -1, -1)]
     logger.info(f"Backfill target dates: {[str(d) for d in target_dates]}")
 
     for forecast_date in target_dates:
-        # Data cutoff: end of D-1 in CET.
-        # CET=UTC+1 (winter), so 23:00 CET = 22:00 UTC
-        data_last_date = forecast_date - timedelta(days=1)
-        cutoff = pd.Timestamp(data_last_date, tz="UTC") + pd.Timedelta(hours=22)
+        # Data cutoff: end of forecast day D in CET (include D's forecast rows).
+        # CET=UTC+1 (winter), so 23:00 CET = 22:00 UTC.
+        cutoff = pd.Timestamp(forecast_date, tz="UTC") + pd.Timedelta(hours=22)
         if cutoff > df_full.index.max():
             logger.info(f"  Skipping {forecast_date}: cutoff {cutoff} beyond data range")
             continue
@@ -83,11 +86,14 @@ def backfill(days: int = 8) -> None:
         forecast_date_str = str(forecast_date)
         logger.info(
             f"  Generating forecast for {forecast_date_str} "
-            f"(data through {data_last_date}, cutoff={cutoff})"
+            f"(data through {forecast_date}, cutoff={cutoff})"
         )
 
-        # Truncate data
-        df_trunc = df_full.loc[:cutoff]
+        # Truncate data and NaN out target_price on the forecast day to prevent
+        # leakage — in production these prices aren't available at forecast time.
+        df_trunc = df_full.loc[:cutoff].copy()
+        forecast_day_start = pd.Timestamp(forecast_date, tz="Europe/Berlin")
+        df_trunc.loc[forecast_day_start:, "target_price"] = np.nan
         if len(df_trunc) < 8760:  # need at least ~1 year of history
             logger.warning(
                 f"  Skipping {forecast_date_str}: insufficient data ({len(df_trunc)} rows)"
