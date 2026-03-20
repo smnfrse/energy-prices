@@ -21,6 +21,7 @@ from src.deploy.inference import (
     DEPLOY_DATA_DIR,
     HISTORY_FILE,
     HISTORY_MAX_DAYS,
+    _compute_model_errors,
     _group_models_by_dataset,
     _impute_inference_gaps,
     _load_dataset_pipeline,
@@ -135,6 +136,9 @@ def backfill(days: int = 8) -> None:
         logger.info(
             f"  {entry['date']}: [{entry['prices'][0]:.1f}, ..., {entry['prices'][-1]:.1f}]"
         )
+
+    # Recompute model errors from updated history + actuals
+    _compute_model_errors(df_full)
 
 
 def _predict_for_date(
