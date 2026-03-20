@@ -30,17 +30,21 @@ HISTORY_MAX_DAYS = 30
 SOURCE_SNAPSHOT_DAYS = 7  # Keep rolling window of source data snapshots
 
 
-def run_inference(skip_update: bool = False) -> dict:
+def run_inference(skip_update: bool = False, skip_ema: bool = False) -> dict:
     """Run the full daily inference pipeline.
 
     Args:
         skip_update: If True, skip data download (use existing inference parquet).
+        skip_ema: If True, skip EMA overlay (use SMARD forecasts as-is).
 
     Returns:
         Dict with forecast data written to deploy/data/.
     """
     if not skip_update:
         _update_data()
+
+    if not skip_ema:
+        _apply_ema_overlay()
 
     merged_path = get_path("merged", "hour")
     if not merged_path.exists():
@@ -177,6 +181,32 @@ def _update_data() -> None:
         logger.error(f"make {target} failed:\n{result.stderr}")
         raise RuntimeError("Data update failed. Check logs above.")
     logger.success("Data update complete")
+
+
+def _apply_ema_overlay() -> None:
+    """Apply EMA overlay to merged dataset (historical + snapshots + live).
+
+    Fetches today's live EMA forecast, combines with historical data and
+    snapshots, then replaces SMARD forecast columns where EMA data exists.
+    If no EMA data is available, logs a warning and continues.
+    """
+    from src.data.ema import build_ema_training_data, get_combined_ema_data
+
+    merged_path = get_path("merged", "hour")
+    if not merged_path.exists():
+        logger.warning(f"Merged dataset not found at {merged_path}, skipping EMA overlay")
+        return
+
+    merged_df = pd.read_parquet(merged_path)
+
+    ema_data = get_combined_ema_data(include_live=True)
+    if ema_data.empty:
+        logger.warning("No EMA data available, skipping overlay")
+        return
+
+    result = build_ema_training_data(merged_df, ema_data)
+    result.to_parquet(merged_path)
+    logger.info(f"EMA overlay applied ({len(ema_data)} EMA hours)")
 
 
 def _group_models_by_dataset(model_infos: list[dict]) -> dict[str, list[int]]:
@@ -703,8 +733,11 @@ if __name__ == "__main__":
         skip_update: bool = typer.Option(
             False, "--skip-update", help="Skip data download, use existing parquet."
         ),
+        skip_ema: bool = typer.Option(
+            False, "--skip-ema", help="Skip EMA overlay, use SMARD forecasts as-is."
+        ),
     ):
         """Generate 24h price forecast from blend ensemble."""
-        run_inference(skip_update=skip_update)
+        run_inference(skip_update=skip_update, skip_ema=skip_ema)
 
     typer.run(main)

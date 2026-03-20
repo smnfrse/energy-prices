@@ -1,14 +1,14 @@
 {
-  "dataset_name": "dataset_v5_full_rfecv",
+  "dataset_name": "ema_dataset_v5_full_rfecv",
   "n_samples": 97679,
-  "n_features": 31,
+  "n_features": 32,
   "n_targets": 1,
   "date_start": "2015-01-04",
   "date_end": "2026-02-25",
-  "created_at": "2026-03-02T16:18:25.713844+00:00",
+  "created_at": "2026-03-20T11:28:44.409040+00:00",
   "format": "hourly",
-  "n_features_in": 192,
-  "n_features_out": 31,
+  "n_features_in": 194,
+  "n_features_out": 32,
   "feature_names_in": [
     "prognostizierte_erzeugung_gesamt",
     "prognostizierte_erzeugung_onshore",
@@ -48,6 +48,8 @@
     "carbon_eur_per_ton",
     "ttf_eur_per_mwh",
     "brent_usd_per_barrel",
+    "forecast_source",
+    "is_true_forecast",
     "target_price_d7_mean",
     "target_price_d7_d1_mean",
     "target_price_d7_d1_std",
@@ -234,7 +236,8 @@
     "stromerzeugung_photovoltaik_ewma_24h",
     "stromerzeugung_wind_offshore_d1_h0-6_mean",
     "prognostizierte_erzeugung_wind_und_photovoltaik_daily_max",
-    "target_price_d1_std"
+    "target_price_d1_std",
+    "day_index"
   ],
   "target_names": [
     "y"
@@ -246,11 +249,11 @@
     "brent_usd_per_barrel_ewma_720h",
     "carbon_eur_per_ton_ewma_24h",
     "carbon_eur_per_ton_ewma_720h",
-    "day_index",
     "day_of_month",
     "day_of_week",
     "day_of_week_cos",
     "day_of_week_sin",
+    "forecast_source",
     "hour_cos",
     "hour_sin",
     "interact_carbon_raw",
@@ -264,6 +267,7 @@
     "interact_wind_onshore_lag",
     "interact_wind_pv_daily_max",
     "interact_wind_pv_forecast",
+    "is_true_forecast",
     "is_weekend",
     "marktpreis_belgien",
     "marktpreis_d\u00e4nemark_1",
@@ -403,5 +407,5 @@
     "year_index"
   ],
   "scaler_info": {},
-  "source_run_id": "c84954543b9d4d81b848ab466e549d21"
+  "source_run_id": "587ce4cfcc1c402e9a65f5b4a0ca4765"
 }

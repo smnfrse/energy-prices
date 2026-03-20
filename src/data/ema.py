@@ -13,11 +13,12 @@ Usage:
 
 from datetime import datetime, timezone
 from pathlib import Path
+import time
 
 from loguru import logger
 import pandas as pd
 
-from src.config import EMA_DATA_DIR, EMA_HISTORICAL_FORECASTS_DIR
+from src.config import DATA_DIR, EMA_DATA_DIR, EMA_HISTORICAL_FORECASTS_DIR
 
 # URL for when the CSV is deployed to GitHub Pages.
 # Falls back to local EMA repo path if the URL is unavailable.
@@ -244,23 +245,28 @@ def load_ema_historical_forecasts(
         is_true_forecast: 1 for backtest (forecast weather), 0 for hindcast (actual weather).
     """
     if path is None:
-        path = EMA_HISTORICAL_FORECASTS_DIR
+        # Try in-repo fallback first (works in CI), then cross-repo path (local dev)
+        fallback_path = DATA_DIR / "ema" / "historical"
+        if fallback_path.exists() and any(fallback_path.glob("*.parquet")):
+            path = fallback_path
+        else:
+            path = EMA_HISTORICAL_FORECASTS_DIR
 
     path = Path(path)
     if not path.exists():
-        raise FileNotFoundError(
+        logger.warning(
             f"EMA historical forecasts directory not found: {path}. "
-            "Run generate_historical_forecasts.py in the EMA repo first."
+            "Checked both data/ema/historical/ and EMA repo path."
         )
+        return pd.DataFrame()
 
     # Discover hindcast and backtest files (skip per_tso_*)
     candidates = sorted(path.glob("hindcast_*.parquet")) + sorted(path.glob("backtest_*.parquet"))
     candidates = [f for f in candidates if not f.name.startswith("per_tso_")]
 
     if not candidates:
-        raise FileNotFoundError(
-            f"No hindcast_*.parquet or backtest_*.parquet files found in {path}"
-        )
+        logger.warning(f"No hindcast_*.parquet or backtest_*.parquet files found in {path}")
+        return pd.DataFrame()
 
     required = set(EMA_OVERLAP_COLUMNS)
     parts = []
@@ -285,9 +291,10 @@ def load_ema_historical_forecasts(
         parts.append(df)
 
     if not parts:
-        raise FileNotFoundError(
+        logger.warning(
             f"No valid files with required columns in {path}. Required: {EMA_OVERLAP_COLUMNS}"
         )
+        return pd.DataFrame()
 
     combined = pd.concat(parts)
 
@@ -319,6 +326,114 @@ def load_ema_historical_forecasts(
     logger.info(
         f"EMA historical forecasts: {len(combined)} hours "
         f"({n_hindcast} hindcast, {n_backtest} backtest), "
+        f"{combined.index.min()} to {combined.index.max()}"
+    )
+    return combined
+
+
+# =============================================================================
+# Combined EMA data (all sources)
+# =============================================================================
+
+
+def _fetch_live_with_retry(max_retries: int = 3, delay_min: int = 15) -> pd.DataFrame | None:
+    """Fetch live EMA forecast, retrying if it doesn't cover tomorrow.
+
+    After fetching, checks whether the forecast's max timestamp extends beyond
+    12 hours from now (i.e., covers tomorrow). If stale, waits and retries.
+
+    Returns:
+        EMA forecast DataFrame, or None if all attempts fail.
+    """
+    df = None
+    for attempt in range(max_retries + 1):
+        df = fetch_ema_forecasts()
+        if df is not None and df.index.max() > pd.Timestamp.now("UTC") + pd.Timedelta(hours=12):
+            return df  # covers tomorrow
+        if attempt < max_retries:
+            logger.warning(
+                f"EMA forecast stale (max={df.index.max() if df is not None else 'N/A'}), "
+                f"retrying in {delay_min}min ({attempt + 1}/{max_retries})"
+            )
+            time.sleep(delay_min * 60)
+    logger.warning("EMA forecast still stale after retries, proceeding anyway")
+    return df
+
+
+def get_combined_ema_data(include_live: bool = False) -> pd.DataFrame:
+    """Combine all EMA data sources into a single DataFrame.
+
+    Priority (later overwrites earlier for duplicate timestamps):
+    1. Historical hindcast/backtest (2022 to ~2026-03-06)
+    2. Daily snapshots from data/ema/ (accumulated from previous runs)
+    3. Live 168h forecast from EMA GitHub Pages (if include_live=True)
+
+    Args:
+        include_live: If True, fetch today's live forecast and save as snapshot.
+
+    Returns:
+        Combined UTC-indexed DataFrame with EMA_OVERLAP_COLUMNS, or empty
+        DataFrame if no data is available.
+    """
+    parts: list[pd.DataFrame] = []
+
+    # 1. Historical hindcast/backtest
+    historical = load_ema_historical_forecasts()
+    if not historical.empty:
+        # Keep only overlap columns (drop source/is_true_forecast metadata for combining)
+        hist_cols = [c for c in EMA_OVERLAP_COLUMNS if c in historical.columns]
+        meta_cols = [c for c in ["source", "is_true_forecast"] if c in historical.columns]
+        parts.append(historical[hist_cols + meta_cols])
+        logger.info(f"Historical: {len(historical)} hours")
+
+    # 2. Daily snapshots
+    snapshots = load_ema_history()
+    if not snapshots.empty:
+        snap_cols = [c for c in EMA_OVERLAP_COLUMNS if c in snapshots.columns]
+        if snap_cols:
+            snap_df = snapshots[snap_cols].copy()
+            snap_df["source"] = "snapshot"
+            snap_df["is_true_forecast"] = 1  # snapshots use forecast weather
+            parts.append(snap_df)
+            logger.info(f"Snapshots: {len(snap_df)} hours")
+
+    # 3. Live forecast
+    if include_live:
+        live = _fetch_live_with_retry()
+        if live is not None:
+            save_ema_snapshot(live)
+            live_cols = [c for c in EMA_OVERLAP_COLUMNS if c in live.columns]
+            if live_cols:
+                live_df = live[live_cols].copy()
+                live_df["source"] = "live"
+                live_df["is_true_forecast"] = 1
+                parts.append(live_df)
+                logger.info(f"Live: {len(live_df)} hours")
+
+    if not parts:
+        logger.warning("No EMA data available from any source")
+        return pd.DataFrame()
+
+    combined = pd.concat(parts)
+
+    # Ensure UTC index
+    if combined.index.tz is None:
+        combined.index = combined.index.tz_localize("UTC")
+    combined.index.name = "date_utc"
+
+    # Dedup: later sources (snapshot, live) overwrite earlier (historical)
+    # Since parts are appended in priority order, keep last
+    if combined.index.duplicated().any():
+        n_dups = combined.index.duplicated(keep="last").sum()
+        combined = combined[~combined.index.duplicated(keep="last")]
+        logger.info(f"Deduped {n_dups} overlapping timestamps (live > snapshot > historical)")
+
+    # Clip negative values
+    overlap_present = [c for c in EMA_OVERLAP_COLUMNS if c in combined.columns]
+    combined[overlap_present] = combined[overlap_present].clip(lower=0)
+
+    logger.info(
+        f"Combined EMA data: {len(combined)} hours, "
         f"{combined.index.min()} to {combined.index.max()}"
     )
     return combined

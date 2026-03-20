@@ -78,6 +78,28 @@ def _flatten_y_true(y: np.ndarray, group_size: int) -> np.ndarray:
     return y.ravel() if y.ndim > 1 else y
 
 
+def _expand_daily_to_hourly_index(daily_index: pd.DatetimeIndex, values: np.ndarray) -> pd.Series:
+    """Expand daily predictions/actuals to hourly-indexed Series.
+
+    Each daily row at timestamp `ts` has 24 values (hours 0-23).
+    These map to timestamps ts, ts+1h, ts+2h, ..., ts+23h.
+
+    Args:
+        daily_index: DatetimeIndex of daily rows.
+        values: (N_days, 24) array of hourly values per day.
+
+    Returns:
+        Series indexed by hourly UTC timestamps.
+    """
+    hourly_ts = []
+    hourly_vals = []
+    for i, ts in enumerate(daily_index):
+        for h in range(24):
+            hourly_ts.append(ts + pd.Timedelta(hours=h))
+            hourly_vals.append(values[i, h] if values.ndim == 2 else values[i])
+    return pd.Series(hourly_vals, index=pd.DatetimeIndex(hourly_ts))
+
+
 def _compute_inverse_mae_weights(maes: np.ndarray) -> np.ndarray:
     """Compute inverse-MAE weights, normalized to sum to 1."""
     inv_mae = 1.0 / (maes + 1e-6)
@@ -621,9 +643,9 @@ def retrain_blend(holdout_days: int | None = None) -> dict:
     mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
     dataset_cache = _load_datasets(config["models"])
 
-    holdout_preds = []
+    holdout_preds_series: list[pd.Series] = []  # timestamp-indexed predictions
+    holdout_y_series: list[pd.Series] = []  # timestamp-indexed actuals
     holdout_maes = []
-    ref_y_holdout_flat: np.ndarray | None = None
 
     for model_info in config["models"]:
         model_path = PRODUCTION_DIR / model_info["file"]
@@ -650,13 +672,23 @@ def retrain_blend(holdout_days: int | None = None) -> dict:
         holdout_mae = mean_absolute_error(y_holdout_flat, y_pred_flat)
         holdout_rmse = float(np.sqrt(np.mean((y_holdout_flat - y_pred_flat) ** 2)))
 
-        holdout_preds.append(y_pred_flat)
+        # Build timestamp-indexed series for blend alignment
+        if group_size == 1:
+            # Daily model: expand to hourly timestamps
+            y_pred_2d = y_pred.reshape(-1, 24) if y_pred.ndim == 1 else y_pred
+            pred_series = _expand_daily_to_hourly_index(X_holdout.index, y_pred_2d)
+            y_holdout_2d = y_holdout.reshape(-1, 24) if y_holdout.ndim == 1 else y_holdout
+            y_series = _expand_daily_to_hourly_index(X_holdout.index, y_holdout_2d)
+        else:
+            # Hourly model: index directly from X_holdout
+            pred_series = pd.Series(y_pred_flat, index=X_holdout.index[:min_len])
+            y_series = pd.Series(y_holdout_flat, index=X_holdout.index[:min_len])
+
+        holdout_preds_series.append(pred_series)
+        holdout_y_series.append(y_series)
         holdout_maes.append(holdout_mae)
         model_info["holdout_mae"] = round(holdout_mae, 4)
         model_info["holdout_rmse"] = round(holdout_rmse, 4)
-
-        if ref_y_holdout_flat is None:
-            ref_y_holdout_flat = y_holdout_flat
 
         joblib.dump(fresh_pipeline, model_path)
 
@@ -665,12 +697,22 @@ def retrain_blend(holdout_days: int | None = None) -> dict:
     for info, w in zip(config["models"], weights):
         info["weight"] = round(float(w), 6)
 
-    min_len = min(len(p) for p in holdout_preds)
-    preds_matrix = np.column_stack([p[:min_len] for p in holdout_preds])
+    # Align predictions by timestamp intersection
+    common_idx = holdout_preds_series[0].index
+    for s in holdout_preds_series[1:]:
+        common_idx = common_idx.intersection(s.index)
+    common_idx = common_idx.sort_values()
+
+    preds_matrix = np.column_stack([s.loc[common_idx].values for s in holdout_preds_series])
     y_blend = preds_matrix @ weights
-    y_ref = ref_y_holdout_flat[:min_len]
+    y_ref = holdout_y_series[0].loc[common_idx].values
     new_blend_mae = float(mean_absolute_error(y_ref, y_blend))
     new_blend_rmse = float(np.sqrt(np.mean((y_ref - y_blend) ** 2)))
+
+    logger.info(
+        f"Blend computed on {len(common_idx)} aligned hours "
+        f"({common_idx.min()} to {common_idx.max()})"
+    )
 
     needs_reselection = False
     if old_blend_mae > 0:

@@ -2,7 +2,7 @@ name: Daily Forecast
 
 on:
   schedule:
-    - cron: '0 19 * * *'  # 19:00 UTC (20:00 CET)
+    - cron: '0 8 * * *'  # 08:00 UTC — after EMA publishes, before day-ahead auction
   workflow_dispatch:
 
 env:
@@ -29,6 +29,25 @@ jobs:
 
       - name: Install dependencies
         run: pip install -e .
+
+      - name: Cache EMA data
+        uses: actions/cache@v4
+        with:
+          path: data/ema/
+          key: ema-cache-${{ github.run_number }}
+          restore-keys: |
+            ema-cache-
+
+      - name: Download EMA historical forecasts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p data/ema/historical
+          for f in hindcast_2022_01_to_2024_12.parquet backtest_2025.parquet; do
+            if [ ! -f "data/ema/historical/$f" ]; then
+              gh release download data-latest --pattern "$f" --dir data/ema/historical --clobber || true
+            fi
+          done
 
       - name: Cache data directory
         uses: actions/cache@v4

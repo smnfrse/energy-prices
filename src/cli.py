@@ -203,17 +203,27 @@ def pipeline(
 def ema_overlay(
     resolution: str = typer.Option("hour", "--resolution", "-r", help="Data resolution."),
     ema_dir: Path = typer.Option(None, "--ema-dir", help="EMA historical forecasts directory."),
+    include_live: bool = typer.Option(
+        False, "--include-live", help="Fetch today's live EMA forecast and include it."
+    ),
 ):
     """Apply EMA forecast overlay on top of the existing merged dataset.
 
-    Loads combined hindcast+backtest data from the EMA repo, replaces the 5 overlap
-    columns in the merged dataset where EMA data exists, and adds forecast_source
-    and is_true_forecast regime indicators.
+    Combines all EMA sources (historical hindcast/backtest, daily snapshots,
+    and optionally the live 168h forecast), then replaces the 5 overlap columns
+    in the merged dataset where EMA data exists.
+
+    Without --include-live: uses historical + snapshots only (for training).
+    With --include-live: also fetches today's live forecast (for inference).
 
     Run after 'merge' and before pipeline/training:
         merge -> ema-overlay -> build_pipeline -> train -> blend select
     """
-    from src.data.ema import build_ema_training_data, load_ema_historical_forecasts
+    from src.data.ema import (
+        build_ema_training_data,
+        get_combined_ema_data,
+        load_ema_historical_forecasts,  # noqa: F811
+    )
 
     merged_path = get_path("merged", resolution)
     if not merged_path.exists():
@@ -222,8 +232,18 @@ def ema_overlay(
     logger.info(f"Loading merged dataset from {merged_path}")
     merged_df = pd.read_parquet(merged_path)
 
-    logger.info("Loading EMA historical forecasts...")
-    ema_forecasts = load_ema_historical_forecasts(path=ema_dir)
+    if ema_dir:
+        # Explicit directory: use historical loader directly (backwards compat)
+        logger.info(f"Loading EMA historical forecasts from {ema_dir}...")
+        ema_forecasts = load_ema_historical_forecasts(path=ema_dir)
+    else:
+        # Combined: historical + snapshots + optional live
+        logger.info(f"Loading combined EMA data (include_live={include_live})...")
+        ema_forecasts = get_combined_ema_data(include_live=include_live)
+
+    if ema_forecasts.empty:
+        logger.warning("No EMA data available, skipping overlay")
+        return
 
     logger.info("Applying EMA overlay...")
     result = build_ema_training_data(merged_df, ema_forecasts)
@@ -358,11 +378,14 @@ def forecast(
     skip_update: bool = typer.Option(
         False, "--skip-update", help="Skip data download, use existing parquet."
     ),
+    skip_ema: bool = typer.Option(
+        False, "--skip-ema", help="Skip EMA overlay, use SMARD forecasts as-is."
+    ),
 ):
     """Generate 24h price forecast from blend ensemble."""
     from src.deploy.inference import run_inference
 
-    run_inference(skip_update=skip_update)
+    run_inference(skip_update=skip_update, skip_ema=skip_ema)
 
 
 if __name__ == "__main__":

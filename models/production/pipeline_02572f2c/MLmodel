@@ -5,9 +5,9 @@ flavors:
     serialization_format: cloudpickle
     sklearn_version: 1.6.1
     skops_trusted_types: null
-mlflow_version: 3.10.0
+mlflow_version: 3.10.1
 model_id: null
-model_size_bytes: 10035
-model_uuid: c309c7bfa8e142b5a37913a344425109
+model_size_bytes: 10089
+model_uuid: e15257cfc9724aa7929ddb575cb4a55e
 prompts: null
-utc_time_created: '2026-03-02 22:41:21.647112'
+utc_time_created: '2026-03-20 20:22:18.627672'
