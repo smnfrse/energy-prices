@@ -17,7 +17,9 @@ I have drawn significantly on two repos to produce this project and want to give
 
 ## Limitations
 
-This repo has a major limitation in that it uses exclusively free data sources. This means that it is missing full data on commodity and electricity markets. I could only use an imperfect reconstruction of daily closing commodity prices rather than any information about trading volumes, prices or volatility during the day, or futures. Similarly, I was only able to use day-ahead prices rather than any information about intraday prices, or energy futures. Without this information you are missing significant drivers of electricity markets and the forecasts would likely improve with access to this information.
+**Forecast timing**: The current pipeline uses SMARD generation and load forecasts as key features. These are published at ~18:00 CET — six hours after the 12:00 CET day-ahead auction that sets electricity prices. This means the live dashboard currently operates as a next-day backtesting system using oracle forecasts rather than a true pre-auction forecasting tool. A companion project ([energy_market_analysis](https://github.com/smnfrse/energy_market_analysis)) produces weather-based generation and load forecasts that are available before the auction, and work to integrate these as a replacement forecast source is underway.
+
+**Data sources**: This repo uses exclusively free data sources. This means that it is missing full data on commodity and electricity markets — only an imperfect reconstruction of daily closing commodity prices rather than any information about trading volumes, intraday prices, or futures. The forecasts would likely improve with access to this information.
 
 ## Methodology
 

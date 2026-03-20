@@ -60,7 +60,7 @@ jobs:
         run: python -m src.deploy.inference
 
       - name: Run backfill
-        run: python scripts/backfill_history.py --days ${{ github.event.inputs.days }}
+        run: python -m src.deploy.backfill --days ${{ github.event.inputs.days }}
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
