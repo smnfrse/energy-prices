@@ -313,6 +313,9 @@ BASE_AGGREGATION_RULES = {
     # Forecasts: aggregate for day D (no lag needed)
     "prognostizierte_*": "sum",
     "prognostizierter_*": "sum",
+    # Forecast source regime indicators (constant within day)
+    "forecast_source": "first",
+    "is_true_forecast": "first",
     # Temporal: constant within day
     "installierte_*": "last",
     "regime_*": "first",
@@ -425,6 +428,8 @@ AVAILABILITY_RULES = [
     AvailabilityRule("carbon_eur_per_ton", -2, None, "commodity"),
     AvailabilityRule("installierte_*", 0, None, "static"),
     AvailabilityRule("regime_*", 0, None, "static"),
+    AvailabilityRule("forecast_source", 0, None, "static"),
+    AvailabilityRule("is_true_forecast", 0, None, "static"),
     # V3 pipeline features - derived at daily level (already lagged by construction)
     AvailabilityRule("pct_renewable", 0, None, "derived"),
     AvailabilityRule("supply_demand_gap", 0, None, "derived"),

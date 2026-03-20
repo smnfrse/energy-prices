@@ -7,6 +7,7 @@ download, update, combine, merge, and pipeline (full end-to-end).
 from pathlib import Path
 
 from loguru import logger
+import pandas as pd
 import typer
 
 from src.config import RAW_DATA_DIR, RAW_DIRS, get_path
@@ -191,6 +192,44 @@ def pipeline(
     run_merge_pipeline(resolution=resolution)
 
     logger.success("Full pipeline complete.")
+
+
+# =============================================================================
+# EMA overlay command
+# =============================================================================
+
+
+@app.command("ema-overlay")
+def ema_overlay(
+    resolution: str = typer.Option("hour", "--resolution", "-r", help="Data resolution."),
+    ema_dir: Path = typer.Option(None, "--ema-dir", help="EMA historical forecasts directory."),
+):
+    """Apply EMA forecast overlay on top of the existing merged dataset.
+
+    Loads combined hindcast+backtest data from the EMA repo, replaces the 5 overlap
+    columns in the merged dataset where EMA data exists, and adds forecast_source
+    and is_true_forecast regime indicators.
+
+    Run after 'merge' and before pipeline/training:
+        merge -> ema-overlay -> build_pipeline -> train -> blend select
+    """
+    from src.data.ema import build_ema_training_data, load_ema_historical_forecasts
+
+    merged_path = get_path("merged", resolution)
+    if not merged_path.exists():
+        raise typer.BadParameter(f"Merged dataset not found: {merged_path}. Run 'merge' first.")
+
+    logger.info(f"Loading merged dataset from {merged_path}")
+    merged_df = pd.read_parquet(merged_path)
+
+    logger.info("Loading EMA historical forecasts...")
+    ema_forecasts = load_ema_historical_forecasts(path=ema_dir)
+
+    logger.info("Applying EMA overlay...")
+    result = build_ema_training_data(merged_df, ema_forecasts)
+
+    result.to_parquet(merged_path)
+    logger.success(f"EMA overlay complete. Saved {len(result)} rows to {merged_path}")
 
 
 # =============================================================================
