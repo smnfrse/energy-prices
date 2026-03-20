@@ -17,14 +17,13 @@ I have drawn significantly on two repos to produce this project and want to give
 
 ## Limitations
 
-**Forecast timing**: The current pipeline uses SMARD generation and load forecasts as key features. These are published at ~18:00 CET — six hours after the 12:00 CET day-ahead auction that sets electricity prices. This means the live dashboard currently operates as a next-day backtesting system using oracle forecasts rather than a true pre-auction forecasting tool. A companion project ([energy_market_analysis](https://github.com/smnfrse/energy_market_analysis)) produces weather-based generation and load forecasts that are available before the auction, and work to integrate these as a replacement forecast source is underway.
-
-**Data sources**: This repo uses exclusively free data sources. This means that it is missing full data on commodity and electricity markets — only an imperfect reconstruction of daily closing commodity prices rather than any information about trading volumes, intraday prices, or futures. The forecasts would likely improve with access to this information.
+**Data sources**: This repo uses exclusively free data sources. Commodity data is limited to reconstructed daily closing prices — no trading volumes, intraday prices, or futures curves. Forecasts would likely improve with richer market data.
 
 ## Methodology
 
 **Data Sources:**
-- **SMARD API** (Bundesnetzagentur): Power generation by source, consumption, cross-border physical flows, market prices, and TSO forecasts. Hourly resolution, Dec 2014 – present.
+- **SMARD API** (Bundesnetzagentur): Power generation by source, consumption, cross-border physical flows, and market prices. Hourly resolution, Dec 2014 – present.
+- **EMA forecasts** ([energy_market_analysis](https://github.com/smnfrse/energy_market_analysis)): Weather-based generation and load forecasts for the DE-LU bidding zone. 168h ahead, available by ~08:00 UTC.
 - **Commodity prices**: EU carbon allowances (ICAP), TTF natural gas futures (Yahoo Finance & FRED), Brent crude oil futures (Yahoo Finance).
 
 **Feature Engineering:**
@@ -51,8 +50,10 @@ The production model is a blended ensemble of 8 individual models (2 per categor
 weight_i = (1 / MAE_i) / sum(1 / MAE_j for all j)
 ```
 
+Generation and load forecasts are produced by a companion project ([energy_market_analysis](https://github.com/smnfrse/energy_market_analysis)) using weather forecast data, and are available by ~08:00 UTC — before the day-ahead auction at ~12:00 CET.
+
 **GitHub Actions automation:**
-- `daily_forecast.yml` — runs at 19:00 UTC daily: `make add-data` → inference → updates `deploy/data/`
+- `daily_forecast.yml` — runs at 08:00 UTC daily: data update → EMA forecast overlay → inference → deploy
 - `retrain.yml` — runs at 06:00 UTC on the 1st and 15th of each month: full model retrain + blend weight refresh
 
 **Dashboard**: Available at GitHub Pages — 24-hour day-ahead forecast with 7-day actuals overlay, EN/DE toggle.
