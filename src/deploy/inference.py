@@ -10,7 +10,7 @@ Usage:
 """
 
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 import json
 from pathlib import Path
 import tempfile
@@ -479,11 +479,15 @@ def _write_source_snapshot(df: pd.DataFrame, forecast_date: str) -> None:
 
 
 def _get_forecast_date(df: pd.DataFrame) -> str:
-    """Determine the forecast target date (day after latest data).
+    """Determine the forecast target date (last day in the dataset).
 
-    Capped at tomorrow (CET) so that afternoon debugging runs target the same
-    day as production runs (which always execute before SMARD publishes
-    day-ahead prices at ~12:00 CET). In production the cap has no effect.
+    SMARD publishes day-ahead generation/load forecasts for day D by ~18:00 CET
+    on D-1, so the merged dataset already contains D's rows at inference time.
+    The model uses D's features (prognostizierte_*) to predict D's prices via
+    tail(24), so the forecast date is D — not D+1.
+
+    Capped at today (CET) so that afternoon debugging runs target the same day
+    as production runs. In production the cap has no effect.
     """
     import zoneinfo
 
@@ -492,18 +496,17 @@ def _get_forecast_date(df: pd.DataFrame) -> str:
         last_date = last_ts.tz_convert("Europe/Berlin").date()
     else:
         last_date = pd.Timestamp(last_ts).date()
-    data_driven = last_date + timedelta(days=1)
 
     tz = zoneinfo.ZoneInfo("Europe/Berlin")
-    tomorrow_cet = datetime.now(tz).date() + timedelta(days=1)
+    today_cet = datetime.now(tz).date()
 
-    if data_driven > tomorrow_cet:
+    if last_date > today_cet:
         logger.info(
-            f"Forecast date capped at {tomorrow_cet} "
+            f"Forecast date capped at {today_cet} "
             f"(data extends to {last_date}, afternoon run detected)"
         )
-        return str(tomorrow_cet)
-    return str(data_driven)
+        return str(today_cet)
+    return str(last_date)
 
 
 def _build_forecast_timestamps(forecast_date: str) -> list[str]:
