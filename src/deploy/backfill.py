@@ -41,10 +41,6 @@ def backfill(days: int = 8) -> None:
         f"Loaded {len(df_full)} rows, index range {df_full.index.min()} to {df_full.index.max()}"
     )
 
-    # Determine the last CET date in the data
-    last_cet = df_full.index.max().tz_convert("Europe/Berlin").date()
-    logger.info(f"Last CET date in data: {last_cet}")
-
     # Load blend ensemble once
     models, weights, config = load_blend()
     groups = _group_models_by_dataset(config["models"])
@@ -60,20 +56,16 @@ def backfill(days: int = 8) -> None:
     existing_dates = {h["date"] for h in history}
     logger.info(f"Existing history: {len(history)} entries ({sorted(existing_dates)})")
 
-    # Generate forecasts for each target date.
-    # Production inference includes rows for the forecast day D itself because SMARD
-    # publishes day-ahead generation/load forecasts by ~18:00 CET on D-1. The model
-    # uses D's forecast features (prognostizierte_*) to predict D's prices. To match
-    # production, the cutoff must include D's rows — but with target_price NaN'd out
-    # to avoid leakage (in production, prices aren't published at forecast time).
-    # Cap at tomorrow (same as production inference) — we can't forecast further out.
+    # Generate forecasts for each target date, working backwards from today.
+    # Each forecast simulates a production run on day D-1 predicting day D:
+    # the data is truncated to include D's generation/load forecast rows (available
+    # by ~18:00 CET on D-1), but with target_price NaN'd out to prevent leakage.
     import zoneinfo
 
     generated_at = datetime.now(timezone.utc).isoformat()
     tz = zoneinfo.ZoneInfo("Europe/Berlin")
-    tomorrow_cet = datetime.now(tz).date() + timedelta(days=1)
-    latest_forecast = min(last_cet, tomorrow_cet)
-    target_dates = [latest_forecast - timedelta(days=i) for i in range(days - 1, -1, -1)]
+    today_cet = datetime.now(tz).date()
+    target_dates = [today_cet - timedelta(days=i) for i in range(days - 1, -1, -1)]
     logger.info(f"Backfill target dates: {[str(d) for d in target_dates]}")
 
     for forecast_date in target_dates:
@@ -122,8 +114,10 @@ def backfill(days: int = 8) -> None:
         history.append(entry)
         logger.success(f"  Generated forecast for {forecast_date_str}")
 
-    # Remove entries beyond tomorrow (stale from previous runs) and trim
-    tomorrow_str = str(tomorrow_cet)
+    # Remove entries beyond tomorrow (stale from previous runs) and trim.
+    # Normal inference (which runs before backfill) creates a legitimate
+    # entry for tomorrow — keep it, but discard anything further out.
+    tomorrow_str = str(today_cet + timedelta(days=1))
     history = [h for h in history if h["date"] <= tomorrow_str]
     history = sorted(history, key=lambda h: h["date"])[-HISTORY_MAX_DAYS:]
 

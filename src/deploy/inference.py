@@ -10,7 +10,7 @@ Usage:
 """
 
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
 import tempfile
@@ -82,7 +82,7 @@ def run_inference(skip_update: bool = False, skip_ema: bool = False) -> dict:
             snap["blend_forecast"] = forecast_hourly
 
     # Build forecast timestamps (next day, hours 0-23 CET)
-    forecast_date = _get_forecast_date(df)
+    forecast_date = _get_forecast_date()
     forecast_timestamps = _build_forecast_timestamps(forecast_date)
 
     # Load recent actuals
@@ -478,35 +478,20 @@ def _write_source_snapshot(df: pd.DataFrame, forecast_date: str) -> None:
     logger.info(f"  Source snapshot: {path.name} ({len(tail)} rows)")
 
 
-def _get_forecast_date(df: pd.DataFrame) -> str:
-    """Determine the forecast target date (last day in the dataset).
+def _get_forecast_date() -> str:
+    """Return tomorrow's date (CET) as the forecast target.
 
-    SMARD publishes day-ahead generation/load forecasts for day D by ~18:00 CET
-    on D-1, so the merged dataset already contains D's rows at inference time.
-    The model uses D's features (prognostizierte_*) to predict D's prices via
-    tail(24), so the forecast date is D — not D+1.
-
-    Capped at today (CET) so that afternoon debugging runs target the same day
-    as production runs. In production the cap has no effect.
+    Inference always predicts D+1 prices. At run time (08:00 UTC on day D),
+    the merged dataset already contains D+1's generation/load forecasts from
+    SMARD/EMA, and the model uses those features via tail(24) to predict D+1's
+    prices. The forecast date is therefore always tomorrow — derived from the
+    clock, not the data, so it stays correct regardless of how far ahead any
+    individual data source extends.
     """
     import zoneinfo
 
-    last_ts = df.index.max()
-    if hasattr(last_ts, "tz_convert"):
-        last_date = last_ts.tz_convert("Europe/Berlin").date()
-    else:
-        last_date = pd.Timestamp(last_ts).date()
-
     tz = zoneinfo.ZoneInfo("Europe/Berlin")
-    today_cet = datetime.now(tz).date()
-
-    if last_date > today_cet:
-        logger.info(
-            f"Forecast date capped at {today_cet} "
-            f"(data extends to {last_date}, afternoon run detected)"
-        )
-        return str(today_cet)
-    return str(last_date)
+    return str(datetime.now(tz).date() + timedelta(days=1))
 
 
 def _build_forecast_timestamps(forecast_date: str) -> list[str]:
