@@ -2,7 +2,7 @@
 
 **[Live Dashboard](https://smnfrse.github.io/energy-prices/)** — daily 24-hour price forecasts
 
-<img width="922" height="829" alt="grafik" src="https://github.com/user-attachments/assets/7cebb60d-4fca-48f3-a0dc-b0165c09eea3" />
+<a href="https://smnfrse.github.io/energy-prices/"><img width="922" height="829" alt="grafik" src="https://github.com/user-attachments/assets/7cebb60d-4fca-48f3-a0dc-b0165c09eea3" /></a>
 
 Predicting hourly day-ahead electricity prices in the Germany/Luxembourg (DE-LU) bidding area using gradient-boosted tree models with engineered features from energy market fundamentals, cross-border flows, and commodity prices.
 
