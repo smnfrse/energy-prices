@@ -55,7 +55,7 @@ def run_inference(skip_update: bool = False, skip_ema: bool = False) -> dict:
     logger.info(f"Loading data from {merged_path}")
     df_full = pd.read_parquet(merged_path)
     logger.info(f"Loaded {len(df_full)} rows, {len(df_full.columns)} columns")
-    df = df_full
+    df = _extend_to_forecast_date(df_full)
 
     # Load blend ensemble
     models, weights, config = load_blend()
@@ -478,15 +478,100 @@ def _write_source_snapshot(df: pd.DataFrame, forecast_date: str) -> None:
     logger.info(f"  Source snapshot: {path.name} ({len(tail)} rows)")
 
 
+def _extend_to_forecast_date(df: pd.DataFrame) -> pd.DataFrame:
+    """Extend the merged dataset to include tomorrow's rows using EMA data.
+
+    At 08:00 UTC on day D, SMARD data only extends to D (today). The EMA live
+    forecast covers 168h ahead and already has D+1's generation/load data.
+    This function appends 24 in-memory rows for D+1, populated with EMA
+    forecast columns, so that tail(24) selects the correct prediction day.
+
+    Raises RuntimeError if EMA data doesn't cover all 24 hours of D+1.
+    """
+    import zoneinfo
+
+    from src.config import EMA_DATA_DIR
+
+    tz = zoneinfo.ZoneInfo("Europe/Berlin")
+    forecast_date = (datetime.now(tz) + timedelta(days=1)).date()
+
+    # Check if data already covers the forecast date (e.g. evening debug runs)
+    last_cet = df.index.max()
+    if hasattr(last_cet, "tz_convert"):
+        last_cet = last_cet.tz_convert("Europe/Berlin")
+    last_date = last_cet.date()
+    if last_date >= forecast_date:
+        logger.info(
+            f"Data already extends to {last_date}, "
+            f"no extension needed for forecast date {forecast_date}"
+        )
+        return df
+
+    # Load latest EMA snapshot (saved by _apply_ema_overlay → save_ema_snapshot)
+    snapshots = sorted(EMA_DATA_DIR.glob("*.parquet"))
+    if not snapshots:
+        raise RuntimeError(
+            f"No EMA snapshots in {EMA_DATA_DIR}. Cannot extend data to {forecast_date}. "
+            "Run with EMA enabled or ensure EMA data is available."
+        )
+
+    ema = pd.read_parquet(snapshots[-1])
+    logger.info(f"Loaded EMA snapshot {snapshots[-1].name} ({len(ema)} rows)")
+
+    # Build 24 hourly CET timestamps for the forecast date
+    target_hours = pd.date_range(
+        start=pd.Timestamp(forecast_date, tz=tz),
+        periods=24,
+        freq="h",
+    )
+
+    # Match EMA (UTC) to our target hours (CET)
+    ema_cet = ema.copy()
+    ema_cet.index = ema_cet.index.tz_convert(tz)
+    ema_for_target = ema_cet.reindex(target_hours)
+
+    n_covered = ema_for_target.notna().all(axis=1).sum()
+    if n_covered < 24:
+        raise RuntimeError(
+            f"EMA data only covers {n_covered}/24 hours for {forecast_date}. "
+            f"EMA snapshot range: {ema.index.min()} to {ema.index.max()} (UTC). "
+            f"Cannot produce forecast for {forecast_date}."
+        )
+
+    # Build new rows preserving dtypes from the original DataFrame
+    new_rows = pd.DataFrame(np.nan, index=target_hours, columns=df.columns, dtype="float64")
+
+    # Populate the 8 EMA forecast columns
+    for col in ema_for_target.columns:
+        if col in new_rows.columns:
+            new_rows[col] = ema_for_target[col].values
+
+    # Set regime/metadata columns from the last existing row
+    last_row = df.iloc[-1]
+    for col in ("regime_de_at_lu", "regime_quarter_hourly"):
+        if col in df.columns:
+            new_rows[col] = last_row[col]
+    new_rows["forecast_source"] = 1.0
+    if "is_true_forecast" in df.columns:
+        new_rows["is_true_forecast"] = 1.0
+
+    result = pd.concat([df, new_rows])
+    # pd.concat with all-NaN rows downgrades DatetimeIndex to plain Index;
+    # restore it so downstream pipeline transformers work correctly.
+    result.index = pd.to_datetime(result.index, utc=True).tz_convert("Europe/Berlin")
+    logger.info(
+        f"Extended data to {forecast_date} with {len(new_rows)} EMA rows "
+        f"(total: {len(result)} rows)"
+    )
+    return result
+
+
 def _get_forecast_date() -> str:
     """Return tomorrow's date (CET) as the forecast target.
 
-    Inference always predicts D+1 prices. At run time (08:00 UTC on day D),
-    the merged dataset already contains D+1's generation/load forecasts from
-    SMARD/EMA, and the model uses those features via tail(24) to predict D+1's
-    prices. The forecast date is therefore always tomorrow — derived from the
-    clock, not the data, so it stays correct regardless of how far ahead any
-    individual data source extends.
+    The pipeline extends the merged dataset to D+1 using EMA data before
+    prediction. If extension fails, the pipeline aborts — so this always
+    matches what tail(24) selects.
     """
     import zoneinfo
 
