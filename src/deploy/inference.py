@@ -495,18 +495,6 @@ def _extend_to_forecast_date(df: pd.DataFrame) -> pd.DataFrame:
     tz = zoneinfo.ZoneInfo("Europe/Berlin")
     forecast_date = (datetime.now(tz) + timedelta(days=1)).date()
 
-    # Check if data already covers the forecast date (e.g. evening debug runs)
-    last_cet = df.index.max()
-    if hasattr(last_cet, "tz_convert"):
-        last_cet = last_cet.tz_convert("Europe/Berlin")
-    last_date = last_cet.date()
-    if last_date >= forecast_date:
-        logger.info(
-            f"Data already extends to {last_date}, "
-            f"no extension needed for forecast date {forecast_date}"
-        )
-        return df
-
     # Load latest EMA snapshot (saved by _apply_ema_overlay → save_ema_snapshot)
     snapshots = sorted(EMA_DATA_DIR.glob("*.parquet"))
     if not snapshots:
@@ -538,7 +526,27 @@ def _extend_to_forecast_date(df: pd.DataFrame) -> pd.DataFrame:
             f"Cannot produce forecast for {forecast_date}."
         )
 
-    # Build new rows preserving dtypes from the original DataFrame
+    # Check if data already covers the forecast date (e.g. SMARD extends to D+1)
+    last_cet = df.index.max()
+    if hasattr(last_cet, "tz_convert"):
+        last_cet = last_cet.tz_convert("Europe/Berlin")
+    last_date = last_cet.date()
+
+    if last_date >= forecast_date:
+        # D+1 rows exist from SMARD/Energy Charts but their forecast columns
+        # are unreliable (SMARD doesn't publish day-ahead forecasts for D+1
+        # at inference time). Overwrite all forecast columns with EMA data.
+        forecast_mask = df.index.tz_convert(tz).date == forecast_date
+        for col in ema_for_target.columns:
+            if col in df.columns:
+                df.loc[forecast_mask, col] = ema_for_target[col].values
+        logger.info(
+            f"Data already extends to {last_date}; "
+            f"overwrote forecast columns from EMA for {forecast_date}"
+        )
+        return df
+
+    # Data doesn't reach D+1 — append new rows from EMA
     new_rows = pd.DataFrame(np.nan, index=target_hours, columns=df.columns, dtype="float64")
 
     # Populate the 8 EMA forecast columns
