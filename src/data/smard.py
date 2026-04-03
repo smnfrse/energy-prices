@@ -45,7 +45,7 @@ def get_timestamps(filter, region="DE-LU", resolution="quarterhour"):
     Raises:
         DataNotAvailableError: If the API returns 404 (data not available for this combination)
     """
-    url = f"https://smard.api.proxy.bund.dev/app/chart_data/{filter}/{region}/index_{resolution}.json"
+    url = f"https://www.smard.de/app/chart_data/{filter}/{region}/index_{resolution}.json"
     response = requests.get(url)
 
     if response.status_code == 404:
@@ -66,7 +66,7 @@ def get_data(filter: int, timestamp, region="DE-LU", resolution="quarterhour"):
     NB: valid timestamps for this step are only on a roughly weekly basis.
     """
     url = (
-        f"https://smard.api.proxy.bund.dev/app/chart_data/{filter}/{region}/"
+        f"https://www.smard.de/app/chart_data/{filter}/{region}/"
         f"{filter}_{region}_{resolution}_{timestamp}.json"
     )
     response = requests.get(url)
