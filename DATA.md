@@ -6,7 +6,7 @@ Documentation of data sources, assumptions, structural breaks, and missing value
 
 ### Primary Data Source: SMARD API
 
-The **SMARD API** (Strommarktdaten) is the official German energy market data platform operated by the Bundesnetzagentur (Federal Network Agency), accessed via `smard.api.proxy.bund.dev`.
+The **SMARD API** (Strommarktdaten) is the official German energy market data platform operated by the Bundesnetzagentur (Federal Network Agency), accessed via `www.smard.de`.
 
 **Data categories**: Market prices (DE-LU and neighbors), power generation (by source), consumption, cross-border flows, forecasts, installed capacity
 
