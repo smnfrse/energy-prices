@@ -1,17 +1,17 @@
 {
-  "last_updated": "2026-04-12T08:52:31.669920+00:00",
-  "forecast_date": "2026-04-13",
+  "last_updated": "2026-04-13T08:41:54.047162+00:00",
+  "forecast_date": "2026-04-14",
   "blend_mae": 12.6764,
   "blend_rmse": 18.4872,
   "blend_me": -3.9931,
   "blend_r2": 0.8036,
   "n_models": 8,
-  "needs_reselection": true,
+  "needs_reselection": false,
   "model_categories": [
-    "linear",
     "catboost",
-    "xgboost",
-    "lgbm"
+    "lgbm",
+    "linear",
+    "xgboost"
   ],
   "last_retrain": "2026-04-01T07:53:07.201378+00:00",
   "model_details": [

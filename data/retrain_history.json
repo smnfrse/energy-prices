@@ -28,7 +28,7 @@
     "old_blend_mae": 9.9305,
     "new_blend_mae": 12.6764,
     "degradation_pct": 27.7,
-    "needs_reselection": true,
+    "needs_reselection": false,
     "n_models": 8
   }
 ]
