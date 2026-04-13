@@ -97,6 +97,6 @@
   "blend_rmse": 18.4872,
   "blend_me": -3.9931,
   "blend_r2": 0.8036,
-  "needs_reselection": true,
+  "needs_reselection": false,
   "blend_run_id": "5b624e4de4cb4e739e65daae08c9ee03"
 }

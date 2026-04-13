@@ -41,6 +41,18 @@ def backfill(days: int = 8) -> None:
         f"Loaded {len(df_full)} rows, index range {df_full.index.min()} to {df_full.index.max()}"
     )
 
+    # Apply EMA overlay (replaces SMARD forecast columns with EMA equivalents).
+    # Uses include_live=False since we're backfilling past dates; if inference ran
+    # first and saved a live snapshot, it'll be picked up from data/ema/.
+    from src.data.ema import build_ema_training_data, get_combined_ema_data
+
+    ema_data = get_combined_ema_data(include_live=False)
+    if not ema_data.empty:
+        df_full = build_ema_training_data(df_full, ema_data)
+        logger.info(f"Applied EMA overlay ({len(ema_data)} EMA hours)")
+    else:
+        logger.warning("No EMA data available, proceeding without overlay")
+
     # Load blend ensemble once
     models, weights, config = load_blend()
     groups = _group_models_by_dataset(config["models"])
