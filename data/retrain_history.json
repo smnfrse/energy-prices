@@ -38,5 +38,13 @@
     "degradation_pct": 3.5,
     "needs_reselection": false,
     "n_models": 8
+  },
+  {
+    "date": "2026-05-01T08:31:52.301858+00:00",
+    "old_blend_mae": 13.1144,
+    "new_blend_mae": 14.9325,
+    "degradation_pct": 13.9,
+    "needs_reselection": false,
+    "n_models": 8
   }
 ]
